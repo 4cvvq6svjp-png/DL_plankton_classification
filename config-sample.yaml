@@ -1,0 +1,14 @@
+data:
+  root_dir: '/opt/Datasets/'
+  batch_size: 128
+  num_workers: 4
+  valid_ratio: 0.2
+
+
+nepochs: 40
+
+logging:
+  logdir: "./logs"  # Better to provide the fullpath, especially on the cluster
+
+model:
+  class: Linear
