@@ -43,14 +43,16 @@ def train(config):
     logging.info("= Loss")
     # vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
     # TODO : Define the loss function
-    loss = None
+    loss = torch.nn.CrossEntropyLoss()
     # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     # Build the optimizer
     logging.info("= Optimizer")
     # vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
     # TODO : Define the optimizer
-    optimizer = None
+    optim_config = config.get("optim", {})
+    lr = optim_config.get("lr", 1e-3)
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     # Build the callbacks

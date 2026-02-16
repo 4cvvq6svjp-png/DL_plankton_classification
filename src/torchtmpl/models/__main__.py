@@ -40,8 +40,34 @@ def test_linear():
         print(f"  {name}: {param.numel()} parameters")
 
 
+def test_ffn():
+    logging.info("\nTesting FFN with 2 hidden layers:")
+    cfg = {"class": "FFN", "num_layers": 2, "num_hidden": 64, "use_dropout": False}
+    input_size = (3, 128, 128)
+    batch_size = 16
+    num_classes = 18
+    model = build_model(cfg, input_size, num_classes)
+
+    input_tensor = torch.randn(batch_size, *input_size)
+    output = model(input_tensor)
+    # vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+    # TODO
+    # Fill in the expected output size
+    expected_output_size = torch.Size([batch_size, num_classes])
+    # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    assert expected_output_size == output.shape
+    print(f"Output tensor of size : {output.shape}")
+    
+    # Count trainable parameters
+    total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f"Total trainable parameters: {total_params}")
+    for name, param in model.named_parameters():
+        print(f"  {name}: {param.numel()} parameters")
+
+
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     useless_function()
     test_linear()
+    test_ffn()
