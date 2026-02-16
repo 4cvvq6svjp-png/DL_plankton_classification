@@ -84,7 +84,7 @@ def get_dataloaders(data_config, use_cuda):
     # vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
     # TODO: Create the Caltech101 dataset
     #       The variable rootdir is useful
-    base_dataset = None
+    base_dataset = torchvision.datasets.Caltech101(root=root_dir, download=False)
     # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     logging.info(f"  - I loaded {len(base_dataset)} samples")
@@ -98,8 +98,8 @@ def get_dataloaders(data_config, use_cuda):
     # vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
     # TODO : Create the train and valid splits. The torch.utils.data.Subset
     #        class is useful for this purpose
-    train_dataset = None
-    valid_dataset = None
+    train_dataset = torch.utils.data.Subset(base_dataset, train_indices)
+    valid_dataset = torch.utils.data.Subset(base_dataset, valid_indices)
     # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     preprocess_transforms = [
@@ -123,8 +123,12 @@ def get_dataloaders(data_config, use_cuda):
     # vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
     # TODO: Create the train and valid dataloaders
     # from their respective datasets
-    train_loader = None
-    valid_loader = None
+    train_loader = torch.utils.data.DataLoader(
+        train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers
+    )
+    valid_loader = torch.utils.data.DataLoader(
+        valid_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers
+    )
     # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     num_classes = len(base_dataset.categories)
     input_size = tuple(train_dataset[0][0].shape)
