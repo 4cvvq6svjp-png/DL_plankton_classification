@@ -16,7 +16,12 @@ def Linear(cfg, input_size, num_classes):
     """
     # TODO: Implement a simple linear model
     # vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
-    layers = []
+    # Calculate flattened input size (C * H * W)
+    flattened_size = reduce(operator.mul, input_size, 1)
+    layers = [
+        nn.Flatten(),
+        nn.Linear(flattened_size, num_classes)
+    ]
     # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     return nn.Sequential(*layers)
@@ -36,3 +41,4 @@ def FFN(cfg, input_size, num_classes):
     layers = []
     # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     return nn.Sequential(*layers)
+    

@@ -13,7 +13,7 @@ import torch.utils.data
 import torchvision
 from torchvision import transforms
 from torchvision.transforms import v2
-from torchvision.utils import make_grid
+from torchvision.utils import make_grid, save_image
 import PIL
 
 import matplotlib.pyplot as plt
@@ -145,15 +145,24 @@ def test_dataloaders():
     }
     use_cuda = torch.cuda.is_available()
 
-    train_loader, valid_loader, input_size, num_classes = get_dataloaders(
-        data_config, use_cuda
-    )
+    try:
+        train_loader, valid_loader, input_size, num_classes = get_dataloaders(
+            data_config, use_cuda
+        )
+        logging.info(f"Input size: {input_size}, Num classes: {num_classes}")
 
-    X, y = next(iter(train_loader))
-    grid = make_grid(X, nrow=8)
-    show(grid)
-    plt.tight_layout()
-    plt.show()
+        X, y = next(iter(train_loader))
+        logging.info(f"Batch loaded: X shape {X.shape}, y shape {y.shape}")
+        grid = make_grid(X, nrow=8)
+        save_image(grid, "batch_preview.png")
+        logging.info("Image saved to batch_preview.png")
+        show(grid)
+        plt.tight_layout()
+        plt.show()
+    except Exception as e:
+        logging.error(f"Error in test_dataloaders: {e}")
+        import traceback
+        traceback.print_exc()
 
 
 

@@ -28,10 +28,16 @@ def test_linear():
     # vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
     # TODO
     # Fill in the expected output size
-    expected_output_size = None
+    expected_output_size = torch.Size([batch_size, num_classes])
     # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
     assert expected_output_size == output.shape
     print(f"Output tensor of size : {output.shape}")
+    
+    # Count trainable parameters
+    total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
+    print(f"Total trainable parameters: {total_params}")
+    for name, param in model.named_parameters():
+        print(f"  {name}: {param.numel()} parameters")
 
 
 
