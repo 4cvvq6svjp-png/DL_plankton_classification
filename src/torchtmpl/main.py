@@ -41,19 +41,27 @@ def train(config):
 
     # Build the loss
     logging.info("= Loss")
-    # vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
-    # TODO : Define the loss function
-    loss = torch.nn.CrossEntropyLoss()
-    # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    loss_cfg = config.get("loss", {"class": "CrossEntropyLoss"})
+    loss_class_name = loss_cfg["class"]
+    
+    if loss_class_name == "FocalLoss":
+        loss = optim.FocalLoss(
+            alpha=loss_cfg.get("alpha", 1), 
+            gamma=loss_cfg.get("gamma", 2)
+        )
+    else:
+        loss = torch.nn.CrossEntropyLoss()
 
     # Build the optimizer
     logging.info("= Optimizer")
-    # vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
-    # TODO : Define the optimizer
     optim_config = config.get("optim", {})
     lr = optim_config.get("lr", 1e-3)
-    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-    # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    
+    # Simple switch pour choisir l'algo depuis la config
+    if optim_config.get("algo") == "Adam":
+        optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    else:
+        optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9)
 
     # Build the callbacks
     logging_config = config["logging"]

@@ -15,7 +15,7 @@ from torchvision import transforms
 from torchvision.transforms import v2
 from torchvision.utils import make_grid, save_image
 import PIL
-
+import os
 import matplotlib.pyplot as plt
 
 
@@ -73,6 +73,7 @@ class WrappedDataset(torch.utils.data.dataset.Dataset):
         return len(self.dataset)
 
 
+
 def get_dataloaders(data_config, use_cuda):
     valid_ratio = data_config["valid_ratio"]
     batch_size = data_config["batch_size"]
@@ -82,9 +83,15 @@ def get_dataloaders(data_config, use_cuda):
     logging.info("  - Dataset creation")
 
     # vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
-    # TODO: Create the Caltech101 dataset
-    #       The variable rootdir is useful
-    base_dataset = torchvision.datasets.Caltech101(root=root_dir, download=False)
+    # MODIFICATION : Utilisation de ImageFolder pour ton dataset perso
+    # On pointe vers le dossier 'train' qui contient les sous-dossiers de classes
+    train_path = os.path.join(root_dir, "train")
+    
+    # Vérification de sécurité
+    if not os.path.exists(train_path):
+        raise FileNotFoundError(f"Le dossier {train_path} n'existe pas. Vérifie ton config.yaml")
+
+    base_dataset = torchvision.datasets.ImageFolder(root=train_path)
     # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     logging.info(f"  - I loaded {len(base_dataset)} samples")
@@ -96,20 +103,25 @@ def get_dataloaders(data_config, use_cuda):
     valid_indices = indices[:num_valid]
 
     # vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
-    # TODO : Create the train and valid splits. The torch.utils.data.Subset
-    #        class is useful for this purpose
+    # Creation des splits (Code inchangé, c'est très bien comme ça)
     train_dataset = torch.utils.data.Subset(base_dataset, train_indices)
     valid_dataset = torch.utils.data.Subset(base_dataset, valid_indices)
     # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
     preprocess_transforms = [
         v2.ToImage(),
-        GrayToRGB(),
-        v2.Resize(128),  # Keeps the aspect ratio
-        v2.RandomCrop(128),  # Crops the variable size to a fixed 128 x 128
+        GrayToRGB(),    # Gardé car le plancton est souvent en N&B, et ResNet veut du RGB
+        
+        # MODIFICATION : ResNet a besoin d'images en 224x224
+        v2.Resize((224, 224)),  
+        # On enlève le RandomCrop ici pour être sûr d'avoir l'image entière redimensionnée
+        # Si tu veux du crop, il faut faire Resize(256) puis RandomCrop(224)
+        
         v2.ToDtype(torch.float32, scale=True),
         v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ]
+    
+    # Tu pourras ajouter des augmentations ici plus tard (flip, rotation...)
     augmentation_transforms = [
     ]
 
@@ -121,8 +133,6 @@ def get_dataloaders(data_config, use_cuda):
 
     # Build the dataloaders
     # vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
-    # TODO: Create the train and valid dataloaders
-    # from their respective datasets
     train_loader = torch.utils.data.DataLoader(
         train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers
     )
@@ -130,7 +140,11 @@ def get_dataloaders(data_config, use_cuda):
         valid_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers
     )
     # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    num_classes = len(base_dataset.categories)
+    
+    # MODIFICATION : ImageFolder utilise .classes, pas .categories
+    num_classes = len(base_dataset.classes)
+    
+    # On récupère la taille d'une image transformée pour vérification
     input_size = tuple(train_dataset[0][0].shape)
 
     return train_loader, valid_loader, input_size, num_classes
