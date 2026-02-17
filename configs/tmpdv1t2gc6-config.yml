@@ -1,10 +1,10 @@
 data:
   root_dir: '/mounts/datasets/datasets/2025-ZooCamChallenge'
-  batch_size: 64
-  num_workers: 8
+  batch_size: 64       # Réduit un peu car ResNet est plus gros que Linear
+  num_workers: 4
   valid_ratio: 0.2
 
-nepochs: 10            # 20 époques suffisent souvent pour du finetuning
+nepochs: 20            # 20 époques suffisent souvent pour du finetuning
 
 logging:
   logdir: "./logs"
