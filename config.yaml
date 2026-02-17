@@ -1,5 +1,5 @@
 data:
-  root_dir: '/opt/Datasets/'
+  root_dir: '/mounts/datasets/datasets/'
   batch_size: 128
   num_workers: 4
   valid_ratio: 0.2

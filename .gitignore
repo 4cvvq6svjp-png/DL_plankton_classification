@@ -1,3 +1,8 @@
 *.pyc
 
 src/torchtmpl.egg-info/*
+
+data/*
+
+
+logs/*
