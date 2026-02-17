@@ -35,8 +35,8 @@ git checkout {commit_id}
 
 
 echo "Setting up the virtual environment"
-python3 -m venv venv
-source venv/bin/activate
+/opt/dce/dce_venv.sh /mounts/datasets/venvs/torch-2.7.1 $TMPDIR/venv
+source $TMPDIR/venv/bin/activate
 
 # Install the library
 python -m pip install .
@@ -98,3 +98,7 @@ os.system(f"cp {configpath} {tmp_configfilepath}")
 
 # Launch the batch jobs
 submit_job(makejob(commit_id, tmp_configfilepath, nruns))
+
+
+# python3 -m venv venv
+# source venv/bin/activate

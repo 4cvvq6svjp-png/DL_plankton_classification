@@ -6,3 +6,9 @@ data/*
 
 
 logs/*
+
+*.err
+
+*.out
+
+*.sbatch
