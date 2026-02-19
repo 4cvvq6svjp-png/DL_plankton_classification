@@ -25,27 +25,31 @@ def conv_down(cin, cout):
     ]
 
 
-
-
-class FancyCNN(nn.Module):
+class VanillaCNN(nn.Module):
     """
     A fancy CNN model with :
         - stacked 3x3 convolutions
         - convolutive down sampling
         - a global average pooling at the end
     """
-
-    def __init__(self, cfg, input_size, num_classes):
-        super().__init__()
+    def _init_(self, cfg, input_size, num_classes):
+        super()._init_()
+        
         layers = []
         cin = input_size[0]
-        # vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
-        # TODO: Implement the model
+        cout = 16
+        for i in range(cfg["num_layers"]):
+            layers.extend(conv_relu_bn(cin, cout))
+            layers.extend(conv_relu_bn(cout, cout))
+            layers.extend(conv_down(cout, 2 * cout))
+            cin = 2 * cout
+            cout = 2 * cout
+            
+        layers.append(nn.AdaptiveAvgPool2d(1))
+        layers.append(nn.Flatten(start_dim=1))
+        layers.append(nn.Linear(cout, num_classes))
+        
         self.model = nn.Sequential(*layers)
-        # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
+        
     def forward(self, x):
-        # vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
-        # TODO: Implement the forward pass
-        return x
-        # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        return self.model(x)
