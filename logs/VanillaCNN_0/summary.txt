@@ -1,0 +1,84 @@
+Logdir : logs/VanillaCNN_0
+## Command 
+/usr/users/sdim/sdim_2/dl_plankton_team7/src/torchtmpl/main.py config-sample.yaml train
+
+ Config : {'data': {'trainpath': '/mounts/datasets/datasets/2025-ZooCamChallenge/train', 'testpath': '/mounts/datasets/datasets/2025-ZooCamChallenge/test', 'batch_size': 256, 'num_workers': 4, 'valid_ratio': 0.2}, 'optim': {'algo': 'Adam', 'params': {'lr': 0.0001}}, 'nepochs': 20, 'loss': 'CrossEntropyLoss', 'logging': {'logdir': './logs'}, 'model': {'class': 'VanillaCNN', 'num_layers': 4}} 
+
+## Summary of the model architecture
+==========================================================================================
+Layer (type:depth-idx)                   Output Shape              Param #
+==========================================================================================
+VanillaCNN                               [256, 86]                 --
+├─Sequential: 1-1                        [256, 86]                 --
+│    └─Conv2d: 2-1                       [256, 16, 128, 128]       448
+│    └─ReLU: 2-2                         [256, 16, 128, 128]       --
+│    └─BatchNorm2d: 2-3                  [256, 16, 128, 128]       32
+│    └─Conv2d: 2-4                       [256, 16, 128, 128]       2,320
+│    └─ReLU: 2-5                         [256, 16, 128, 128]       --
+│    └─BatchNorm2d: 2-6                  [256, 16, 128, 128]       32
+│    └─Conv2d: 2-7                       [256, 32, 64, 64]         2,080
+│    └─ReLU: 2-8                         [256, 32, 64, 64]         --
+│    └─BatchNorm2d: 2-9                  [256, 32, 64, 64]         64
+│    └─Conv2d: 2-10                      [256, 32, 64, 64]         9,248
+│    └─ReLU: 2-11                        [256, 32, 64, 64]         --
+│    └─BatchNorm2d: 2-12                 [256, 32, 64, 64]         64
+│    └─Conv2d: 2-13                      [256, 32, 64, 64]         9,248
+│    └─ReLU: 2-14                        [256, 32, 64, 64]         --
+│    └─BatchNorm2d: 2-15                 [256, 32, 64, 64]         64
+│    └─Conv2d: 2-16                      [256, 64, 32, 32]         8,256
+│    └─ReLU: 2-17                        [256, 64, 32, 32]         --
+│    └─BatchNorm2d: 2-18                 [256, 64, 32, 32]         128
+│    └─Conv2d: 2-19                      [256, 64, 32, 32]         36,928
+│    └─ReLU: 2-20                        [256, 64, 32, 32]         --
+│    └─BatchNorm2d: 2-21                 [256, 64, 32, 32]         128
+│    └─Conv2d: 2-22                      [256, 64, 32, 32]         36,928
+│    └─ReLU: 2-23                        [256, 64, 32, 32]         --
+│    └─BatchNorm2d: 2-24                 [256, 64, 32, 32]         128
+│    └─Conv2d: 2-25                      [256, 128, 16, 16]        32,896
+│    └─ReLU: 2-26                        [256, 128, 16, 16]        --
+│    └─BatchNorm2d: 2-27                 [256, 128, 16, 16]        256
+│    └─Conv2d: 2-28                      [256, 128, 16, 16]        147,584
+│    └─ReLU: 2-29                        [256, 128, 16, 16]        --
+│    └─BatchNorm2d: 2-30                 [256, 128, 16, 16]        256
+│    └─Conv2d: 2-31                      [256, 128, 16, 16]        147,584
+│    └─ReLU: 2-32                        [256, 128, 16, 16]        --
+│    └─BatchNorm2d: 2-33                 [256, 128, 16, 16]        256
+│    └─Conv2d: 2-34                      [256, 256, 8, 8]          131,328
+│    └─ReLU: 2-35                        [256, 256, 8, 8]          --
+│    └─BatchNorm2d: 2-36                 [256, 256, 8, 8]          512
+│    └─AdaptiveAvgPool2d: 2-37           [256, 256, 1, 1]          --
+│    └─Flatten: 2-38                     [256, 256]                --
+│    └─Linear: 2-39                      [256, 86]                 22,102
+==========================================================================================
+Total params: 588,870
+Trainable params: 588,870
+Non-trainable params: 0
+Total mult-adds (G): 78.37
+==========================================================================================
+Input size (MB): 50.33
+Forward/backward pass size (MB): 5033.34
+Params size (MB): 2.36
+Estimated Total Size (MB): 5086.03
+==========================================================================================
+
+## Loss
+
+CrossEntropyLoss()
+
+## Datasets : 
+Train : WrappedDataset(dataset=<torch.utils.data.dataset.Subset object at 0x7faa9cb811b0>, transform=Compose(
+      ToImage()
+      GrayToRGB()
+      Resize(size=[128], interpolation=InterpolationMode.BILINEAR, antialias=True)
+      RandomCrop(size=(128, 128), pad_if_needed=False, fill=0, padding_mode=constant)
+      ToDtype(scale=True)
+      Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225], inplace=False)
+))
+Validation : WrappedDataset(dataset=<torch.utils.data.dataset.Subset object at 0x7faa9cb81210>, transform=Compose(
+      ToImage()
+      GrayToRGB()
+      Resize(size=[128], interpolation=InterpolationMode.BILINEAR, antialias=True)
+      RandomCrop(size=(128, 128), pad_if_needed=False, fill=0, padding_mode=constant)
+      ToDtype(scale=True)
+      Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225], inplace=False)
+))

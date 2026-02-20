@@ -1,14 +1,31 @@
 data:
-  root_dir: '/opt/Datasets/'
-  batch_size: 128
+  trainpath: '/mounts/datasets/datasets/2025-ZooCamChallenge/train'
+  testpath: '/mounts/datasets/datasets/2025-ZooCamChallenge/test'
+  batch_size: 64
   num_workers: 4
   valid_ratio: 0.2
 
+optim:
+  algo: Adam
+  params:
+    lr: 0.0001
 
-nepochs: 40
+nepochs: 20
+loss: "CrossEntropyLoss"
 
 logging:
-  logdir: "./logs"  # Better to provide the fullpath, especially on the cluster
-
+  # wandb: 
+  #   project: sample_project
+  #   entity: sample_entity
+  logdir: "./logs/VanillaCNN_0/best_model.pt"  # Better to provide the fullpath, especially on the cluster
+#model:
+  #class: VanillaCNN
 model:
-  class: Linear
+  class: VanillaCNN
+  num_layers : 4
+
+test :
+  checkpoint : "./logs/VanillaCNN_0/best_model.pt"
+
+output :
+  submission_path : "./submission.csv"

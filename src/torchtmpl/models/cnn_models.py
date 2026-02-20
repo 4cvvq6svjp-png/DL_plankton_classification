@@ -32,8 +32,8 @@ class VanillaCNN(nn.Module):
         - convolutive down sampling
         - a global average pooling at the end
     """
-    def _init_(self, cfg, input_size, num_classes):
-        super()._init_()
+    def __init__(self, cfg, input_size, num_classes):
+        super().__init__()
         
         layers = []
         cin = input_size[0]
