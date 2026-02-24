@@ -7,6 +7,7 @@ import os
 import torch
 import torch.nn
 import tqdm
+from sklearn.metrics import accuracy_score, f1_score
 
 
 def generate_unique_logpath(logdir, raw_run_name):
@@ -74,7 +75,7 @@ def train_one_epoch(model, loader, f_loss, optimizer, device):
         device    -- A torch.device
 
     Returns :
-        The averaged train metrics computed over a sliding window
+        Dictionary with loss, accuracy, and F1-score
     """
 
     # We enter train mode.
@@ -83,6 +84,9 @@ def train_one_epoch(model, loader, f_loss, optimizer, device):
 
     total_loss = 0
     num_samples = 0
+    all_preds = []
+    all_targets = []
+    
     for i, (inputs, targets) in (pbar := tqdm.tqdm(enumerate(loader))):
 
         inputs, targets = inputs.to(device), targets.to(device)
@@ -98,12 +102,25 @@ def train_one_epoch(model, loader, f_loss, optimizer, device):
         optimizer.step()
 
         # Update the metrics
-        # We here consider the loss is batch normalized
         total_loss += inputs.shape[0] * loss.item()
         num_samples += inputs.shape[0]
+        
+        # Collect predictions for accuracy/F1
+        preds = torch.argmax(outputs, dim=1).cpu().numpy()
+        all_preds.extend(preds)
+        all_targets.extend(targets.cpu().numpy())
+        
         pbar.set_description(f"Train loss : {total_loss/num_samples:.2f}")
 
-    return total_loss / num_samples
+    # Compute metrics
+    accuracy = accuracy_score(all_targets, all_preds)
+    f1 = f1_score(all_targets, all_preds, average='weighted', zero_division=0)
+    
+    return {
+        'loss': total_loss / num_samples,
+        'accuracy': accuracy,
+        'f1': f1
+    }
 
 
 def test(model, loader, f_loss, device):
@@ -117,7 +134,7 @@ def test(model, loader, f_loss, device):
         device    -- A torch.device
 
     Returns :
-        The averaged test metrics computed over the loader
+        Dictionary with loss, accuracy, and F1-score
     """
 
     # We enter eval mode.
@@ -126,6 +143,9 @@ def test(model, loader, f_loss, device):
 
     total_loss = 0
     num_samples = 0
+    all_preds = []
+    all_targets = []
+    
     with torch.no_grad():
         for inputs, targets in loader:
 
@@ -137,8 +157,20 @@ def test(model, loader, f_loss, device):
             loss = f_loss(outputs, targets)
 
             # Update the metrics
-            # We here consider the loss is batch normalized
             total_loss += inputs.shape[0] * loss.item()
             num_samples += inputs.shape[0]
+            
+            # Collect predictions for accuracy/F1
+            preds = torch.argmax(outputs, dim=1).cpu().numpy()
+            all_preds.extend(preds)
+            all_targets.extend(targets.cpu().numpy())
 
-    return total_loss / num_samples
+    # Compute metrics
+    accuracy = accuracy_score(all_targets, all_preds)
+    f1 = f1_score(all_targets, all_preds, average='weighted', zero_division=0)
+    
+    return {
+        'loss': total_loss / num_samples,
+        'accuracy': accuracy,
+        'f1': f1
+    }

@@ -145,8 +145,31 @@ def get_dataloaders(data_config, use_cuda):
 
     num_classes = len(base_dataset.classes)
     input_size = tuple(train_dataset_wrapped[0][0].shape)
+    
+    # Compute class weights for loss function
+    class_weights = compute_class_weights(train_indices, base_dataset)
 
-    return train_loader, valid_loader, input_size, num_classes
+    return train_loader, valid_loader, input_size, num_classes, class_weights
+
+
+def compute_class_weights(train_indices, base_dataset):
+    """
+    Compute class weights for handling imbalanced datasets.
+    Weights are inversely proportional to class frequency.
+    
+    Arguments:
+        train_indices: indices of training samples
+        base_dataset: the base dataset with .targets attribute
+    
+    Returns:
+        torch.Tensor: class weights (num_classes,)
+    """
+    train_targets = [base_dataset.targets[i] for i in train_indices]
+    class_counts = np.bincount(train_targets)
+    class_weights = 1.0 / (class_counts + 1e-6)
+    # Normalize so weights sum to num_classes
+    class_weights = class_weights / class_weights.sum() * len(class_weights)
+    return torch.tensor(class_weights, dtype=torch.float32)
 
 
 
@@ -163,7 +186,7 @@ def test_dataloaders(config_path):
     use_cuda = torch.cuda.is_available()
 
     try:
-        train_loader, valid_loader, input_size, num_classes = get_dataloaders(
+        train_loader, valid_loader, input_size, num_classes, class_weights = get_dataloaders(
             data_config, use_cuda
         )
         logging.info(f"Input size: {input_size}, Num classes: {num_classes}")

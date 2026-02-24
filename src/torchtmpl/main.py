@@ -29,7 +29,7 @@ def train(config):
     logging.info("= Building the dataloaders")
     data_config = config["data"]
 
-    train_loader, valid_loader, input_size, num_classes = data.get_dataloaders(
+    train_loader, valid_loader, input_size, num_classes, class_weights = data.get_dataloaders(
         data_config, use_cuda
     )
 
@@ -44,13 +44,16 @@ def train(config):
     loss_cfg = config.get("loss", {"class": "CrossEntropyLoss"})
     loss_class_name = loss_cfg["class"]
     
+    # Move class weights to device
+    class_weights = class_weights.to(device)
+    
     if loss_class_name == "FocalLoss":
         loss = optim.FocalLoss(
-            alpha=loss_cfg.get("alpha", 1), 
+            alpha=class_weights,  # Use computed class weights
             gamma=loss_cfg.get("gamma", 2)
         )
     else:
-        loss = torch.nn.CrossEntropyLoss()
+        loss = torch.nn.CrossEntropyLoss(weight=class_weights)
 
     # Build the optimizer
     logging.info("= Optimizer")
@@ -107,14 +110,14 @@ def train(config):
         f.write(summary_text)
     logging.info(summary_text)
 
-    # Define the early stopping callback
+    # Define the early stopping callback (based on validation loss)
     model_checkpoint = utils.ModelCheckpoint(
         model, str(logdir / "best_model.pt"), min_is_best=True
     )
 
     for e in range(config["nepochs"]):
             # Train 1 epoch
-            train_loss = utils.train_one_epoch(model, train_loader, loss, optimizer, device)
+            train_metrics = utils.train_one_epoch(model, train_loader, loss, optimizer, device)
             
             # On met à jour le scheduler si on l'a activé
             if use_scheduler:
@@ -124,17 +127,24 @@ def train(config):
                 current_lr = lr
 
             # Test
-            test_loss = utils.test(model, valid_loader, loss, device)
+            test_metrics = utils.test(model, valid_loader, loss, device)
 
-            updated = model_checkpoint.update(test_loss)
+            # Save best model based on validation loss
+            updated = model_checkpoint.update(test_metrics['loss'])
             logging.info(
-                "[%d/%d] LR: %.6f | Train Loss: %.3f | Test loss : %.3f %s"
+                "[%d/%d] LR: %.6f | "
+                "Train Loss: %.3f | Train Acc: %.3f | Train F1: %.3f | "
+                "Val Loss: %.3f | Val Acc: %.3f | Val F1: %.3f %s"
                 % (
                     e,
                     config["nepochs"],
                     current_lr,
-                    train_loss,
-                    test_loss,
+                    train_metrics['loss'],
+                    train_metrics['accuracy'],
+                    train_metrics['f1'],
+                    test_metrics['loss'],
+                    test_metrics['accuracy'],
+                    test_metrics['f1'],
                     "[>> BETTER <<]" if updated else "",
                 )
             )
