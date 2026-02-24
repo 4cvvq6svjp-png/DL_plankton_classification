@@ -3,8 +3,10 @@ data:
   batch_size: 32
   num_workers: 8
   valid_ratio: 0.2
+  augmentation: 'classic'    # Choix : 'classic' (juste flip) ou 'heavy' (rotation, jitter...)
+  sampler: 'standard'      # Choix : 'standard' (aléatoire normal) ou 'weighted'
 
-nepochs: 10            # 20 époques suffisent souvent pour du finetuning
+nepochs: 10         
 
 logging:
   logdir: "./logs"
@@ -20,5 +22,6 @@ loss:
   gamma: 2
 
 optim:
-  algo: Adam                     # On pourra le lire dans main.py
-  lr: 0.0001                     # Learning rate plus bas pour le finetuning
+  algo: AdamW                       # Choix : Adam, AdamW, SGD
+  lr: 0.0005
+  scheduler: CosineAnnealing        # Choix : None ou CosineAnnealing
