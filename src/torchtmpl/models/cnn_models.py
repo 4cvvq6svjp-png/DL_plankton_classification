@@ -53,27 +53,32 @@ class FancyCNN(nn.Module):
     
 
 import torch.nn as nn
-from transformers import ResNetForImageClassification
+from transformers import AutoModelForImageClassification
 
 class HfModel(nn.Module):
     def __init__(self, cfg, input_size, num_classes):
         super().__init__()
-        model_name = cfg.get("name", "microsoft/resnet-50")
         
-        self.model = ResNetForImageClassification.from_pretrained(
+        # 1. On récupère les infos de ton YAML (cfg correspond déjà à config["model"])
+        model_name = cfg.get("name")
+        freeze = cfg.get("freeze_backbone", True)
+        
+        # 2. Le cœur de la correction : AutoModelForImageClassification
+        # Il s'adaptera automatiquement à EfficientNet, ResNet, ViT, etc.
+        self.model = AutoModelForImageClassification.from_pretrained(
             model_name,
             num_labels=num_classes,
             ignore_mismatched_sizes=True
         )
         
-        # --- AJOUT: Geler le backbone ---
-        # On lit le config. S'il dit True, on gèle.
-        if cfg.get("freeze_backbone", False):
-            # Dans l'architecture Hugging Face, 'resnet' est le feature extractor
-            for param in self.model.resnet.parameters():
+        # 3. Le gel des poids (Transfer Learning)
+        if freeze:
+            # L'astuce magique : .base_model cible l'extracteur de features
+            # de n'importe quel modèle, peu importe son créateur.
+            for param in self.model.base_model.parameters():
                 param.requires_grad = False
-            # La couche finale (classifier) reste entraînable par défaut !
             
     def forward(self, x):
+        # Hugging Face attend un argument nommé 'pixel_values' pour les images
         outputs = self.model(pixel_values=x)
         return outputs.logits
