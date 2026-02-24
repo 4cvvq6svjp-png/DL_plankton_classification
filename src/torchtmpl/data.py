@@ -150,13 +150,16 @@ def get_dataloaders(data_config, use_cuda):
 
 
 
-def test_dataloaders():
-    data_config = {
-        "root_dir": "/mounts/datasets/datasets/",
-        "valid_ratio": 0.2,
-        "batch_size": 32,
-        "num_workers": 0,
-    }
+import sys
+import yaml
+
+def test_dataloaders(config_path):
+    # On lit le vrai fichier de configuration passé en paramètre
+    logging.info(f"Loading config from {config_path}")
+    with open(config_path, "r") as f:
+        config = yaml.safe_load(f)
+        
+    data_config = config["data"]
     use_cuda = torch.cuda.is_available()
 
     try:
@@ -167,6 +170,8 @@ def test_dataloaders():
 
         X, y = next(iter(train_loader))
         logging.info(f"Batch loaded: X shape {X.shape}, y shape {y.shape}")
+        
+        # Sauvegarde et affichage
         grid = make_grid(X, nrow=8)
         save_image(grid, "batch_preview.png")
         logging.info("Image saved to batch_preview.png")
@@ -209,7 +214,12 @@ class KaggleTestDataset(torch.utils.data.Dataset):
 
 
 
-
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    test_dataloaders()
+    
+    # On vérifie qu'on a bien donné le config.yaml dans la commande
+    if len(sys.argv) != 2:
+        logging.error(f"Usage: python {sys.argv[0]} <config.yaml>")
+        sys.exit(-1)
+        
+    test_dataloaders(sys.argv[1])

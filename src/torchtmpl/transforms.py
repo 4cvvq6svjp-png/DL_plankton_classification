@@ -17,7 +17,7 @@ def get_transforms(split="train", img_size=224, aug_type="classic"):
                 v2.RandomHorizontalFlip(p=0.5),
                 v2.RandomVerticalFlip(p=0.5),
                 v2.RandomRotation(degrees=360),
-                v2.ColorJitter(brightness=0.2, contrast=0.2),
+                v2.ColorJitter(brightness=0.1, contrast=0.1),
             ]
         elif aug_type == "classic":
             # Augmentation très légère standard
