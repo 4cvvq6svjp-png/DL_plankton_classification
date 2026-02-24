@@ -50,6 +50,7 @@ class FancyCNN(nn.Module):
         return x
         # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
+    
 
 import torch.nn as nn
 from transformers import ResNetForImageClassification
@@ -57,17 +58,22 @@ from transformers import ResNetForImageClassification
 class HfModel(nn.Module):
     def __init__(self, cfg, input_size, num_classes):
         super().__init__()
-        # On lit le nom du modèle depuis la config
         model_name = cfg.get("name", "microsoft/resnet-50")
         
-        # Chargement du modèle Hugging Face
         self.model = ResNetForImageClassification.from_pretrained(
             model_name,
             num_labels=num_classes,
             ignore_mismatched_sizes=True
         )
         
+        # --- AJOUT: Geler le backbone ---
+        # On lit le config. S'il dit True, on gèle.
+        if cfg.get("freeze_backbone", False):
+            # Dans l'architecture Hugging Face, 'resnet' est le feature extractor
+            for param in self.model.resnet.parameters():
+                param.requires_grad = False
+            # La couche finale (classifier) reste entraînable par défaut !
+            
     def forward(self, x):
-        # Hugging Face attend 'pixel_values' et renvoie un objet complexe
         outputs = self.model(pixel_values=x)
         return outputs.logits

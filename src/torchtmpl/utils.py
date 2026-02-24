@@ -126,18 +126,19 @@ def test(model, loader, f_loss, device):
 
     total_loss = 0
     num_samples = 0
-    for inputs, targets in loader:
+    with torch.no_grad():
+        for inputs, targets in loader:
 
-        inputs, targets = inputs.to(device), targets.to(device)
+            inputs, targets = inputs.to(device), targets.to(device)
 
-        # Compute the forward propagation
-        outputs = model(inputs)
+            # Compute the forward propagation
+            outputs = model(inputs)
 
-        loss = f_loss(outputs, targets)
+            loss = f_loss(outputs, targets)
 
-        # Update the metrics
-        # We here consider the loss is batch normalized
-        total_loss += inputs.shape[0] * loss.item()
-        num_samples += inputs.shape[0]
+            # Update the metrics
+            # We here consider the loss is batch normalized
+            total_loss += inputs.shape[0] * loss.item()
+            num_samples += inputs.shape[0]
 
     return total_loss / num_samples

@@ -1,6 +1,6 @@
 data:
   root_dir: '/mounts/datasets/datasets/2025-ZooCamChallenge'
-  batch_size: 32
+  batch_size: 64
   num_workers: 8
   valid_ratio: 0.2
 
@@ -12,7 +12,7 @@ logging:
 model:
   class: HfModel                 # Nom de la classe Python à appeler
   name: microsoft/resnet-50      # Nom du modèle sur Hugging Face
-  freeze_backbone: True         # Optionnel: True si tu veux geler les poids initiaux
+  freeze_backbone: False         # Optionnel: True si tu veux geler les poids initiaux
 
 loss:
   class: FocalLoss               # Nom de ta nouvelle classe de loss
