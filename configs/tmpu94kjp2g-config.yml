@@ -12,9 +12,9 @@ logging:
   logdir: "./logs"
 
 model:
-  class: HfModel                        # Nom de la classe Python à appeler
+  class: HfModel                 # Nom de la classe Python à appeler
   name: facebook/convnext-tiny-224      # Nom du modèle sur Hugging Face
-  freeze_backbone: True                  # Optionnel: True si tu veux geler les poids initiaux
+  freeze_backbone: True         # Optionnel: True si tu veux geler les poids initiaux
 
 loss:
   class: FocalLoss               # Nom de ta nouvelle classe de loss
