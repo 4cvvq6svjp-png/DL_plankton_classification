@@ -56,12 +56,20 @@ def train(config):
     logging.info("= Optimizer")
     optim_config = config.get("optim", {})
     lr = optim_config.get("lr", 1e-3)
+    algo = optim_config.get("algo", "Adam")
     
-    # Simple switch pour choisir l'algo depuis la config
-    if optim_config.get("algo") == "Adam":
+    if algo == "AdamW":
+        optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-2)
+    elif algo == "Adam":
         optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     else:
         optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9)
+
+    # Build the Scheduler
+    use_scheduler = optim_config.get("scheduler") == "CosineAnnealing"
+    if use_scheduler:
+        logging.info("= Using CosineAnnealingLR Scheduler")
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config["nepochs"])
 
     # Build the callbacks
     logging_config = config["logging"]
@@ -105,29 +113,31 @@ def train(config):
     )
 
     for e in range(config["nepochs"]):
-        # Train 1 epoch
-        train_loss = utils.train_one_epoch(model, train_loader, loss, optimizer, device)
+            # Train 1 epoch
+            train_loss = utils.train_one_epoch(model, train_loader, loss, optimizer, device)
+            
+            # On met à jour le scheduler si on l'a activé
+            if use_scheduler:
+                scheduler.step()
+                current_lr = scheduler.get_last_lr()[0]
+            else:
+                current_lr = lr
 
-        # Test
-        test_loss = utils.test(model, valid_loader, loss, device)
+            # Test
+            test_loss = utils.test(model, valid_loader, loss, device)
 
-        updated = model_checkpoint.update(test_loss)
-        logging.info(
-            "[%d/%d] Test loss : %.3f %s"
-            % (
-                e,
-                config["nepochs"],
-                test_loss,
-                "[>> BETTER <<]" if updated else "",
+            updated = model_checkpoint.update(test_loss)
+            logging.info(
+                "[%d/%d] LR: %.6f | Train Loss: %.3f | Test loss : %.3f %s"
+                % (
+                    e,
+                    config["nepochs"],
+                    current_lr,
+                    train_loss,
+                    test_loss,
+                    "[>> BETTER <<]" if updated else "",
+                )
             )
-        )
-
-        # Update the dashboard
-        metrics = {"train_CE": train_loss, "test_CE": test_loss}
-
-        # On the tensorboard
-        for key, value in metrics.items():
-            tensorboard_writer.add_scalar(key, value, e)
 
 
 

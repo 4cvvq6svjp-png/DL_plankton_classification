@@ -17,6 +17,7 @@ from torchvision.utils import make_grid, save_image
 import PIL
 import os
 import matplotlib.pyplot as plt
+from . import transforms as custom_transforms
 
 
 def show(imgs):
@@ -75,26 +76,22 @@ class WrappedDataset(torch.utils.data.dataset.Dataset):
 
 
 def get_dataloaders(data_config, use_cuda):
-    valid_ratio = data_config["valid_ratio"]
-    batch_size = data_config["batch_size"]
-    num_workers = data_config["num_workers"]
+    valid_ratio = data_config.get("valid_ratio", 0.2)
+    batch_size = data_config.get("batch_size", 32)
+    num_workers = data_config.get("num_workers", 4)
     root_dir = data_config["root_dir"]
-
-    logging.info("  - Dataset creation")
-
-    # vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
-    # MODIFICATION : Utilisation de ImageFolder pour ton dataset perso
-    # On pointe vers le dossier 'train' qui contient les sous-dossiers de classes
-    train_path = os.path.join(root_dir, "train")
     
-    # Vérification de sécurité
+    # --- LECTURE DE LA CONFIG ---
+    aug_type = data_config.get("augmentation", "classic")
+    sampler_type = data_config.get("sampler", "standard")
+
+    logging.info(f"  - Setup: Augmentation={aug_type} | Sampler={sampler_type}")
+
+    train_path = os.path.join(root_dir, "train")
     if not os.path.exists(train_path):
-        raise FileNotFoundError(f"Le dossier {train_path} n'existe pas. Vérifie ton config.yaml")
+        raise FileNotFoundError(f"Dossier introuvable: {train_path}")
 
     base_dataset = torchvision.datasets.ImageFolder(root=train_path)
-    # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-    logging.info(f"  - I loaded {len(base_dataset)} samples")
 
     indices = list(range(len(base_dataset)))
     random.shuffle(indices)
@@ -102,52 +99,55 @@ def get_dataloaders(data_config, use_cuda):
     train_indices = indices[num_valid:]
     valid_indices = indices[:num_valid]
 
-    # vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
-    # Creation des splits (Code inchangé, c'est très bien comme ça)
     train_dataset = torch.utils.data.Subset(base_dataset, train_indices)
     valid_dataset = torch.utils.data.Subset(base_dataset, valid_indices)
-    # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-    preprocess_transforms = [
-        v2.ToImage(),
-        GrayToRGB(),    # Gardé car le plancton est souvent en N&B, et ResNet veut du RGB
-        
-        # MODIFICATION : ResNet a besoin d'images en 224x224
-        v2.Resize((224, 224)),  
-        # On enlève le RandomCrop ici pour être sûr d'avoir l'image entière redimensionnée
-        # Si tu veux du crop, il faut faire Resize(256) puis RandomCrop(224)
-        
-        v2.ToDtype(torch.float32, scale=True),
-        v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-    ]
+    # --- CHOIX DU SAMPLER ---
+    sampler = None
+    shuffle = True # Par défaut on mélange
     
-    # Tu pourras ajouter des augmentations ici plus tard (flip, rotation...)
-    augmentation_transforms = [
-    ]
+    if sampler_type == "weighted":
+        logging.info("  - Calcul des poids pour le WeightedRandomSampler...")
+        train_targets = [base_dataset.targets[i] for i in train_indices]
+        class_counts = np.bincount(train_targets)
+        class_weights = 1.0 / (class_counts + 1e-6)
+        sample_weights = [class_weights[t] for t in train_targets]
+        
+        sampler = torch.utils.data.WeightedRandomSampler(
+            weights=sample_weights,
+            num_samples=len(sample_weights),
+            replacement=True
+        )
+        shuffle = False # VITAL : on désactive le shuffle manuel si on a un sampler
 
-    train_transforms = v2.Compose(preprocess_transforms + augmentation_transforms)
-    train_dataset = WrappedDataset(train_dataset, train_transforms)
+    # --- APPLICATION DES TRANSFORMATIONS ---
+    train_transforms = custom_transforms.get_transforms(split="train", img_size=224, aug_type=aug_type)
+    valid_transforms = custom_transforms.get_transforms(split="valid", img_size=224)
 
-    valid_transforms = v2.Compose(preprocess_transforms)
-    valid_dataset = WrappedDataset(valid_dataset, valid_transforms)
+    train_dataset_wrapped = WrappedDataset(train_dataset, train_transforms)
+    valid_dataset_wrapped = WrappedDataset(valid_dataset, valid_transforms)
 
-    # Build the dataloaders
-    # vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv
+    # --- CRÉATION DES DATALOADERS ---
     train_loader = torch.utils.data.DataLoader(
-        train_dataset, batch_size=batch_size, shuffle=True, num_workers=num_workers
+        train_dataset_wrapped, 
+        batch_size=batch_size, 
+        sampler=sampler,   # Sera None si on utilise le standard
+        shuffle=shuffle,   # Sera False si on utilise le weighted sampler
+        num_workers=num_workers
     )
+    
     valid_loader = torch.utils.data.DataLoader(
-        valid_dataset, batch_size=batch_size, shuffle=False, num_workers=num_workers
+        valid_dataset_wrapped, 
+        batch_size=batch_size, 
+        shuffle=False, 
+        num_workers=num_workers
     )
-    # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-    
-    # MODIFICATION : ImageFolder utilise .classes, pas .categories
+
     num_classes = len(base_dataset.classes)
-    
-    # On récupère la taille d'une image transformée pour vérification
-    input_size = tuple(train_dataset[0][0].shape)
+    input_size = tuple(train_dataset_wrapped[0][0].shape)
 
     return train_loader, valid_loader, input_size, num_classes
+
 
 
 def test_dataloaders():
@@ -177,6 +177,36 @@ def test_dataloaders():
         logging.error(f"Error in test_dataloaders: {e}")
         import traceback
         traceback.print_exc()
+
+
+
+
+from PIL import Image
+
+class KaggleTestDataset(torch.utils.data.Dataset):
+    def __init__(self, root_dir, transform=None):
+        self.root_dir = root_dir
+        self.transform = transform
+        # On liste toutes les images du dossier
+        self.images = [f for f in os.listdir(root_dir) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+        
+    def __len__(self):
+        return len(self.images)
+    
+    def __getitem__(self, idx):
+        img_name = self.images[idx]
+        img_path = os.path.join(self.root_dir, img_name)
+        
+        # On ouvre l'image en forçant le format RGB pour ResNet
+        image = Image.open(img_path).convert("RGB")
+        
+        if self.transform:
+            image = self.transform(image)
+            
+        # On renvoie le tenseur de l'image ET son nom
+        return image, img_name
+
+
 
 
 

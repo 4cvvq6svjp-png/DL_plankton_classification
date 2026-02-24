@@ -26,8 +26,10 @@ echo "Running on " $(hostname)
 
 echo "Copying the source directory and data"
 date
-mkdir $TMPDIR/code
-rsync -r --exclude logs --exclude logslurms --exclude configs . $TMPDIR/code
+mkdir -p $TMPDIR/code
+
+# MODIFICATION : On a enlevé "--exclude configs" pour que le fichier YAML temporaire passe bien
+rsync -r --exclude logs --exclude logslurms . $TMPDIR/code
 
 echo "Checking out the correct version of the code commit_id {commit_id}"
 cd $TMPDIR/code
@@ -44,7 +46,20 @@ python -m pip install .
 echo "Training"
 python -m torchtmpl.main {configpath} train
 
-if [[ $? != 0 ]]; then
+# MODIFICATION : On stocke le code de sortie pour rapatrier les logs MÊME si ça a planté
+TRAIN_EXIT_CODE=$?
+
+# =========================================================
+# NOUVEAU : RAPATRIEMENT DES LOGS ET MODÈLES
+# =========================================================
+echo "Retrieving logs from the compute node..."
+mkdir -p $current_dir/logs
+# On renvoie tout le dossier logs du GPU vers ton dossier d'origine
+rsync -avz logs/ $current_dir/logs/
+# =========================================================
+
+# On quitte avec erreur uniquement après avoir tout sauvegardé
+if [[ $TRAIN_EXIT_CODE != 0 ]]; then
     exit -1
 fi
 """
@@ -101,4 +116,4 @@ submit_job(makejob(commit_id, tmp_configfilepath, nruns))
 
 
 # python3 -m venv venv
-# source venv/bin/activate
+# source venv
