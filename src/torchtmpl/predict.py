@@ -19,7 +19,7 @@ def generate_submission(config, checkpoint_path):
 
     # 1. Préparation des données
     data_config = config["data"]
-    test_dir = os.path.join(data_config["root_dir"], "test")
+    test_dir = os.path.join(data_config["root_dir"], "test", "imgs")
     
     if not os.path.exists(test_dir):
         raise FileNotFoundError(f"Le dossier test est introuvable : {test_dir}")
