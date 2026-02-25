@@ -13,7 +13,7 @@ logging:
 
 model:
   class: HfModel                        # Nom de la classe Python à appeler
-  name: microsoft/resnet-50     # Nom du modèle sur Hugging Face
+  name: google/efficientnet-b2     # Nom du modèle sur Hugging Face
   freeze_backbone: True                  # Optionnel: True si tu veux geler les poids initiaux
 
 loss:
