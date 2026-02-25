@@ -12,6 +12,8 @@ import wandb
 import torch
 import torchinfo.torchinfo as torchinfo
 from torch.utils.tensorboard import SummaryWriter
+import datetime
+
 
 # Local imports
 from . import data
@@ -76,8 +78,11 @@ def train(config):
 
     # Build the callbacks
     logging_config = config["logging"]
-    # Let us use as base logname the class name of the modek
-    logname = model_config["class"]
+    
+    # On ajoute la date et l'heure exacte au nom de base (ex: HfModel_20231025_143000)
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    logname = f"{model_config['class']}_{timestamp}"
+    
     logdir = utils.generate_unique_logpath(logging_config["logdir"], logname)
     if not os.path.isdir(logdir):
         os.makedirs(logdir)
