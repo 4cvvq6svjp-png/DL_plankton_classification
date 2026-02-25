@@ -52,19 +52,26 @@ def generate_submission(config, checkpoint_path):
     # 3. Boucle de prédiction
     all_filenames = []
     all_predictions = []
-
     logging.info("Starting inference...")
     with torch.no_grad(): # Indispensable pour ne pas faire de OutOfMemory !
-        for images, filenames in test_loader:
+        for i, (images, filenames) in enumerate(test_loader):
             images = images.to(device)
             outputs = model(images)
             
+            # DEBUG : Afficher les sorties du modèle
+            logging.info(f"Batch {i}: outputs shape = {outputs.shape}")
+            logging.info(f"Batch {i}: outputs min={outputs.min():.4f}, max={outputs.max():.4f}, mean={outputs.mean():.4f}")
+            logging.info(f"Batch {i}: Sample output = {outputs[0]}")
+            
             # On prend l'indice de la classe ayant la plus forte probabilité (les logits les plus hauts)
             _, predicted_classes = torch.max(outputs, 1)
+            logging.info(f"Batch {i}: Predicted classes = {predicted_classes[:5]}")
             
             all_filenames.extend(filenames)
             all_predictions.extend(predicted_classes.cpu().numpy())
-
+            
+            if i >= 2:  # Afficher seulement les 3 premiers batches
+                break
     # 4. Sauvegarde du fichier CSV
     # Vérifie sur Kaggle le nom exact des colonnes attendues (souvent "Id" ou "image_id" et "Category" ou "label")
     df = pd.DataFrame({
