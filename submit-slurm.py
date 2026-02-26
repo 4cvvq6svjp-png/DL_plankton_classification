@@ -12,7 +12,7 @@ def makejob(commit_id, configpath, nruns):
 #SBATCH --job-name=templatecode
 #SBATCH --nodes=1
 #SBATCH --partition=gpu_prod_long
-#SBATCH --time=12:00:00
+#SBATCH --time=36:00:00
 #SBATCH --output=logslurms/slurm-%A_%a.out
 #SBATCH --error=logslurms/slurm-%A_%a.err
 #SBATCH --array=1-{nruns}
@@ -34,6 +34,18 @@ rsync -r --exclude logs --exclude logslurms . $TMPDIR/code
 echo "Checking out the correct version of the code commit_id {commit_id}"
 cd $TMPDIR/code
 git checkout {commit_id}
+
+# =========================================================
+# LA MAGIE EST ICI : Le tunnel vers ton espace permanent
+# =========================================================
+# 1. On s'assure que le dossier permanent existe chez toi
+mkdir -p $current_dir/logs
+
+# 2. On crée un lien symbolique. 
+# Quand Python écrira dans le dossier local 'logs', 
+# les fichiers iront DIRECTEMENT sur ton disque permanent !
+ln -s $current_dir/logs $TMPDIR/code/logs
+# =========================================================
 
 
 echo "Setting up the virtual environment"

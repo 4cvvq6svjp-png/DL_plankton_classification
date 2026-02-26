@@ -67,7 +67,6 @@ def generate_submission(config, checkpoint_path):
             
 
     # 4. Sauvegarde du fichier CSV
-    # Vérifie sur Kaggle le nom exact des colonnes attendues (souvent "Id" ou "image_id" et "Category" ou "label")
     df = pd.DataFrame({
         "imgname": all_filenames,
         "label": all_predictions

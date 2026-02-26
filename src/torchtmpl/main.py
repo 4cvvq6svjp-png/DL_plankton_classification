@@ -26,7 +26,6 @@ def train(config):
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda") if use_cuda else torch.device("cpu")
 
-
     # Build the dataloaders
     logging.info("= Building the dataloaders")
     data_config = config["data"]
@@ -57,29 +56,8 @@ def train(config):
     else:
         loss = torch.nn.CrossEntropyLoss(weight=class_weights)
 
-    # Build the optimizer
-    logging.info("= Optimizer")
-    optim_config = config.get("optim", {})
-    lr = optim_config.get("lr", 1e-3)
-    algo = optim_config.get("algo", "Adam")
-    
-    if algo == "AdamW":
-        optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-2)
-    elif algo == "Adam":
-        optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-    else:
-        optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=0.9)
-
-    # Build the Scheduler
-    use_scheduler = optim_config.get("scheduler") == "CosineAnnealing"
-    if use_scheduler:
-        logging.info("= Using CosineAnnealingLR Scheduler")
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=config["nepochs"])
-
-    # Build the callbacks
+    # Build the callbacks & logging
     logging_config = config["logging"]
-    
-    # On ajoute la date et l'heure exacte au nom de base (ex: HfModel_20231025_143000)
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     logname = f"{model_config['class']}_{timestamp}"
     
@@ -120,39 +98,94 @@ def train(config):
         model, str(logdir / "best_model.pt"), min_is_best=True
     )
 
-    for e in range(config["nepochs"]):
-            # Train 1 epoch
-            train_metrics = utils.train_one_epoch(model, train_loader, loss, optimizer, device)
-            
-            # On met à jour le scheduler si on l'a activé
-            if use_scheduler:
-                scheduler.step()
-                current_lr = scheduler.get_last_lr()[0]
-            else:
-                current_lr = lr
+    # ==========================================
+    # PHASE 1 : WARM-UP (Entraînement de la tête)
+    # ==========================================
+    logging.info("\n=== DÉBUT PHASE 1 : WARM-UP (Backbone gelé) ===")
+    warmup_epochs = 3 
+    
+    # 1. On s'assure que le backbone est gelé
+    for param in model.model.base_model.parameters():
+        param.requires_grad = False
+        
+    # 2. On crée un optimiseur UNIQUEMENT pour les paramètres dégelés (la tête)
+    optimizer_warmup = torch.optim.AdamW(
+        filter(lambda p: p.requires_grad, model.parameters()), 
+        lr=1e-3, 
+        weight_decay=1e-2
+    )
 
-            # Test
-            test_metrics = utils.test(model, valid_loader, loss, device)
+    for e in range(warmup_epochs):
+        train_metrics = utils.train_one_epoch(model, train_loader, loss, optimizer_warmup, device)
+        test_metrics = utils.test(model, valid_loader, loss, device)
+        
+        updated = model_checkpoint.update(test_metrics['loss'])
+        logging.info(
+            f"[Warm-up {e+1}/{warmup_epochs}] "
+            f"Train Loss: {train_metrics['loss']:.3f} | Train Acc: {train_metrics['accuracy']:.3f} | "
+            f"Val Loss: {test_metrics['loss']:.3f} | Val F1: {test_metrics['f1']:.3f} "
+            f"{'[>> BETTER <<]' if updated else ''}"
+        )
+        
+        # Enregistrement TensorBoard
+        tensorboard_writer.add_scalar('Loss/Train', train_metrics['loss'], e)
+        tensorboard_writer.add_scalar('Loss/Validation', test_metrics['loss'], e)
+        tensorboard_writer.add_scalar('F1/Validation', test_metrics['f1'], e)
+        tensorboard_writer.add_scalar('Learning_Rate', 1e-3, e)
 
-            # Save best model based on validation loss
-            updated = model_checkpoint.update(test_metrics['loss'])
-            logging.info(
-                "[%d/%d] LR: %.6f | "
-                "Train Loss: %.3f | Train Acc: %.3f | Train F1: %.3f | "
-                "Val Loss: %.3f | Val Acc: %.3f | Val F1: %.3f %s"
-                % (
-                    e,
-                    config["nepochs"],
-                    current_lr,
-                    train_metrics['loss'],
-                    train_metrics['accuracy'],
-                    train_metrics['f1'],
-                    test_metrics['loss'],
-                    test_metrics['accuracy'],
-                    test_metrics['f1'],
-                    "[>> BETTER <<]" if updated else "",
-                )
-            )
+
+    # ==========================================
+    # PHASE 2 : FINE-TUNING (Entraînement complet)
+    # ==========================================
+    logging.info("\n=== DÉBUT PHASE 2 : FINE-TUNING (Backbone dégelé) ===")
+    
+    # On lit la config pour le scheduler
+    optim_config = config.get("optim", {})
+    use_scheduler = optim_config.get("scheduler") == "CosineAnnealing"
+    
+    # 1. On dégèle tout le modèle (Backbone + Tête)
+    for param in model.parameters():
+        param.requires_grad = True
+
+    # 2. On recrée un NOUVEL optimiseur avec un LR beaucoup plus faible
+    fine_tune_lr = 1e-5
+    optimizer_finetune = torch.optim.AdamW(model.parameters(), lr=fine_tune_lr, weight_decay=1e-2)
+
+    # 3. On attache le CosineAnnealingLR à ce nouvel optimiseur si demandé
+    if use_scheduler:
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer_finetune, 
+            T_max=config["nepochs"] - warmup_epochs
+        )
+
+    for e in range(warmup_epochs, config["nepochs"]):
+        train_metrics = utils.train_one_epoch(model, train_loader, loss, optimizer_finetune, device)
+        
+        if use_scheduler:
+            scheduler.step()
+            current_lr = scheduler.get_last_lr()[0]
+        else:
+            current_lr = fine_tune_lr
+
+        test_metrics = utils.test(model, valid_loader, loss, device)
+        
+        updated = model_checkpoint.update(test_metrics['loss'])
+        logging.info(
+            f"[Fine-Tune {e+1}/{config['nepochs']}] LR: {current_lr:.6f} | "
+            f"Train Loss: {train_metrics['loss']:.3f} | Train Acc: {train_metrics['accuracy']:.3f} | "
+            f"Val Loss: {test_metrics['loss']:.3f} | Val F1: {test_metrics['f1']:.3f} "
+            f"{'[>> BETTER <<]' if updated else ''}"
+        )
+        
+        # Enregistrement TensorBoard (suite continue de la courbe)
+        tensorboard_writer.add_scalar('Loss/Train', train_metrics['loss'], e)
+        tensorboard_writer.add_scalar('Loss/Validation', test_metrics['loss'], e)
+        tensorboard_writer.add_scalar('F1/Validation', test_metrics['f1'], e)
+        tensorboard_writer.add_scalar('Learning_Rate', current_lr, e)
+
+    # Fermeture propre du logger TensorBoard
+    tensorboard_writer.close()
+    logging.info("=== Entraînement terminé ! ===")
 
 
 

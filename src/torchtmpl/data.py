@@ -18,6 +18,7 @@ import PIL
 import os
 import matplotlib.pyplot as plt
 from . import transforms as custom_transforms
+from sklearn.model_selection import train_test_split
 
 
 def show(imgs):
@@ -80,12 +81,13 @@ def get_dataloaders(data_config, use_cuda):
     batch_size = data_config.get("batch_size", 32)
     num_workers = data_config.get("num_workers", 4)
     root_dir = data_config["root_dir"]
-    
+    aug_type = data_config.get("augmentation", "classic")
+    img_size = data_config.get("img_size", 224)
+    resize_size = data_config.get("resize_size", 256)
     # --- LECTURE DE LA CONFIG ---
     aug_type = data_config.get("augmentation", "classic")
-    sampler_type = data_config.get("sampler", "standard")
 
-    logging.info(f"  - Setup: Augmentation={aug_type} | Sampler={sampler_type}")
+    logging.info(f"  - Setup: Augmentation={aug_type} | Stratified Split activé")
 
     train_path = os.path.join(root_dir, "train")
     if not os.path.exists(train_path):
@@ -93,36 +95,25 @@ def get_dataloaders(data_config, use_cuda):
 
     base_dataset = torchvision.datasets.ImageFolder(root=train_path)
 
+    # --- NOUVEAU DÉCOUPAGE STRATIFIÉ ---
     indices = list(range(len(base_dataset)))
-    random.shuffle(indices)
-    num_valid = int(valid_ratio * len(base_dataset))
-    train_indices = indices[num_valid:]
-    valid_indices = indices[:num_valid]
+    targets = base_dataset.targets # On récupère toutes les étiquettes
+
+    # train_test_split s'occupe de mélanger ET de respecter les proportions (stratify)
+    train_indices, valid_indices = train_test_split(
+        indices, 
+        test_size=valid_ratio, 
+        stratify=targets, 
+        random_state=42 # Fixe l'aléatoire pour rendre tes tests reproductibles
+    )
 
     train_dataset = torch.utils.data.Subset(base_dataset, train_indices)
     valid_dataset = torch.utils.data.Subset(base_dataset, valid_indices)
 
-    # --- CHOIX DU SAMPLER ---
-    sampler = None
-    shuffle = True # Par défaut on mélange
-    
-    if sampler_type == "weighted":
-        logging.info("  - Calcul des poids pour le WeightedRandomSampler...")
-        train_targets = [base_dataset.targets[i] for i in train_indices]
-        class_counts = np.bincount(train_targets)
-        class_weights = 1.0 / (class_counts + 1e-6)
-        sample_weights = [class_weights[t] for t in train_targets]
-        
-        sampler = torch.utils.data.WeightedRandomSampler(
-            weights=sample_weights,
-            num_samples=len(sample_weights),
-            replacement=True
-        )
-        shuffle = False # VITAL : on désactive le shuffle manuel si on a un sampler
-
     # --- APPLICATION DES TRANSFORMATIONS ---
-    train_transforms = custom_transforms.get_transforms(split="train", img_size=224, aug_type=aug_type)
-    valid_transforms = custom_transforms.get_transforms(split="valid", img_size=224)
+    # Changement ici : on passe à 260 pour optimiser les performances de l'EfficientNet-B2
+    train_transforms = custom_transforms.get_transforms(split="train", img_size=img_size, resize_size=resize_size)
+    valid_transforms = custom_transforms.get_transforms(split="valid", img_size=img_size, resize_size=resize_size)
 
     train_dataset_wrapped = WrappedDataset(train_dataset, train_transforms)
     valid_dataset_wrapped = WrappedDataset(valid_dataset, valid_transforms)
@@ -131,8 +122,7 @@ def get_dataloaders(data_config, use_cuda):
     train_loader = torch.utils.data.DataLoader(
         train_dataset_wrapped, 
         batch_size=batch_size, 
-        sampler=sampler,   # Sera None si on utilise le standard
-        shuffle=shuffle,   # Sera False si on utilise le weighted sampler
+        shuffle=True,      # Le mélange classique suffit pour l'entraînement
         num_workers=num_workers
     )
     
@@ -146,7 +136,7 @@ def get_dataloaders(data_config, use_cuda):
     num_classes = len(base_dataset.classes)
     input_size = tuple(train_dataset_wrapped[0][0].shape)
     
-    # Compute class weights for loss function
+    # Calcul des poids de classes pour la CrossEntropyLoss
     class_weights = compute_class_weights(train_indices, base_dataset)
 
     return train_loader, valid_loader, input_size, num_classes, class_weights
