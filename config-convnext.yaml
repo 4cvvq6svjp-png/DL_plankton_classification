@@ -6,7 +6,7 @@ data:
   img_size: 224
   resize_size: 256
 
-nepochs: 10         
+nepochs: 18         
 
 logging:
   logdir: "./logs"
