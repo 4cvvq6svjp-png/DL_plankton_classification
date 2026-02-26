@@ -35,14 +35,26 @@ git checkout {commit_id}
 
 
 echo "Setting up the virtual environment"
-python3 -m venv venv
-source venv/bin/activate
+/opt/dce/dce_venv.sh /mounts/datasets/venvs/torch-2.7.1 $TMPDIR/venv
+source $TMPDIR/venv/bin/activate
 
 # Install the library
 python -m pip install .
 
 echo "Training"
 python -m torchtmpl.main {configpath} train
+
+# MODIFICATION : On stocke le code de sortie pour rapatrier les logs MÊME si ça a planté
+TRAIN_EXIT_CODE=$?
+ 
+# =========================================================
+# NOUVEAU : RAPATRIEMENT DES LOGS ET MODÈLES
+# =========================================================
+echo "Retrieving logs from the compute node..."
+mkdir -p $current_dir/logs
+# On renvoie tout le dossier logs du GPU vers ton dossier d'origine
+rsync -avz logs/ $current_dir/logs/
+# =========================================================
 
 if [[ $? != 0 ]]; then
     exit -1

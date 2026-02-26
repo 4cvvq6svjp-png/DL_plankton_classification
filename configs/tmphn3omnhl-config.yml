@@ -17,7 +17,7 @@ logging:
   # wandb: 
   #   project: sample_project
   #   entity: sample_entity
-  logdir: "./logs"  # Better to provide the fullpath, especially on the cluster
+  logdir: "./logs/VanillaCNN_0"  # Better to provide the fullpath, especially on the cluster
 #model:
   #class: VanillaCNN
 model:

@@ -10,6 +10,7 @@ import yaml
 import torch
 from torch.utils.tensorboard import SummaryWriter
 import torchinfo.torchinfo as torchinfo
+import datetime
 
 from . import data
 from . import models
@@ -40,7 +41,7 @@ def train(config):
     # LOSS
     # -----------------------------
     loss = torch.nn.CrossEntropyLoss()
-
+    
     # -----------------------------
     # OPTIMIZER (FIX LR BUG)
     # -----------------------------
@@ -52,7 +53,11 @@ def train(config):
     # -----------------------------
     # LOGGING
     # -----------------------------
-    logdir = config["logging"]["logdir"]
+
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    logname = f"{config["model"]['class']}_{timestamp}"
+    
+    logdir = utils.generate_unique_logpath(config["logging"]["logdir"], logname)
 
     if not os.path.isdir(logdir):
         os.makedirs(logdir)
