@@ -1,0 +1,27 @@
+data:
+  root_dir: '/mounts/datasets/datasets/2025-ZooCamChallenge'
+  batch_size: 32
+  num_workers: 8
+  valid_ratio: 0.2
+  augmentation: 'heavy'    # Choix : 'classic' (juste flip) ou 'heavy' (rotation, jitter...)
+  sampler: 'classic'      # Choix : 'standard' (aléatoire normal) ou 'weighted'
+
+nepochs: 10         
+
+logging:
+  logdir: "./logs"
+
+model:
+  class: HfModel                        # Nom de la classe Python à appeler
+  name: facebook/convnext-tiny-224      # Nom du modèle sur Hugging Face
+  freeze_backbone: True                  # Optionnel: True si tu veux geler les poids initiaux
+
+loss:
+  class: FocalLoss               # Nom de ta nouvelle classe de loss
+  alpha: 1
+  gamma: 2
+
+optim:
+  algo: AdamW                       # Choix : Adam, AdamW, SGD
+  lr: 0.0005
+  scheduler: CosineAnnealing        # Choix : None ou CosineAnnealing
