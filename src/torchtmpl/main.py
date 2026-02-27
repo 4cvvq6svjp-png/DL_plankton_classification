@@ -55,7 +55,7 @@ def train(config):
     # -----------------------------
 
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    logname = f"{config["model"]['class']}_{timestamp}"
+    logname = f"{config['model']['class']}_{timestamp}"
     
     logdir = utils.generate_unique_logpath(config["logging"]["logdir"], logname)
 

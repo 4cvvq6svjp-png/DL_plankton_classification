@@ -20,20 +20,32 @@ date
 mkdir $TMPDIR/code
 rsync -r --exclude logs --exclude logslurms --exclude configs . $TMPDIR/code
 
-echo "Checking out the correct version of the code commit_id 38736e06acb19bbd9924da31ad8bfa878d2f6e3a"
+echo "Checking out the correct version of the code commit_id 69583e332973773fadc045c14302f1e5cb1f962f"
 cd $TMPDIR/code
-git checkout 38736e06acb19bbd9924da31ad8bfa878d2f6e3a
+git checkout 69583e332973773fadc045c14302f1e5cb1f962f
 
 
 echo "Setting up the virtual environment"
-python3 -m venv venv
-source venv/bin/activate
+/opt/dce/dce_venv.sh /mounts/datasets/venvs/torch-2.7.1 $TMPDIR/venv
+source $TMPDIR/venv/bin/activate
 
 # Install the library
 python -m pip install .
 
 echo "Training"
-python -m torchtmpl.main /usr/users/sdim/sdim_2/dl_plankton_team7/configs/tmphn3omnhl-config.yml train
+python -m torchtmpl.main /usr/users/sdim/sdim_2/dl_plankton_team7/configs/tmp14t_d9ta-config.yml train
+
+# MODIFICATION : On stocke le code de sortie pour rapatrier les logs MÊME si ça a planté
+TRAIN_EXIT_CODE=$?
+ 
+# =========================================================
+# NOUVEAU : RAPATRIEMENT DES LOGS ET MODÈLES
+# =========================================================
+echo "Retrieving logs from the compute node..."
+mkdir -p $current_dir/logs
+# On renvoie tout le dossier logs du GPU vers ton dossier d'origine
+rsync -avz logs/ $current_dir/logs/
+# =========================================================
 
 if [[ $? != 0 ]]; then
     exit -1
