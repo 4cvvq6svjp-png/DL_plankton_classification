@@ -23,7 +23,7 @@ loss:
 
 optim:
   algo: AdamW
-  head_lr: 1e-3
-  backbone_lr: 1e-5
-  finetune_head_lr: 1e-4
+  head_lr: 0.001
+  backbone_lr: 0.00001
+  finetune_head_lr: 0.0001
   scheduler: CosineAnnealing

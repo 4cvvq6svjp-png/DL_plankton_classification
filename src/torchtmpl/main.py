@@ -123,7 +123,7 @@ def train(config):
     # PHASE 1 : WARM-UP (Entraînement de la tête uniquement)
     # ==========================================
     warmup_epochs = config.get("warmup_epochs", 5)
-    head_lr = config.get("optim", {}).get("head_lr", 1e-3)
+    head_lr = float(config.get("optim", {}).get("head_lr", 1e-3))
     logging.info(f"\n=== PHASE 1 : WARM-UP ({warmup_epochs} epochs, head LR={head_lr}) ===")
 
     for param in model.model.base_model.parameters():
@@ -162,8 +162,8 @@ def train(config):
     # PHASE 2 : FINE-TUNING avec LR différentiels
     # ==========================================
     optim_config = config.get("optim", {})
-    backbone_lr = optim_config.get("backbone_lr", 1e-5)
-    finetune_head_lr = optim_config.get("finetune_head_lr", 1e-4)
+    backbone_lr = float(optim_config.get("backbone_lr", 1e-5))
+    finetune_head_lr = float(optim_config.get("finetune_head_lr", 1e-4))
     finetune_epochs = config["nepochs"] - warmup_epochs
 
     logging.info(
