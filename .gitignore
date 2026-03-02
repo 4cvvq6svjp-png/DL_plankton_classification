@@ -12,3 +12,16 @@ logs/*
 *.out
 
 *.sbatch
+
+
+configs/*
+
+logs/*
+
+logslurms/*
+
+venv/*
+
+*.pt
+
+*.pth
