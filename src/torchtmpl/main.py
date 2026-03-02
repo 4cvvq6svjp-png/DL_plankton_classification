@@ -40,21 +40,18 @@ def train(config):
     model = models.build_model(model_config, input_size, num_classes)
     model.to(device)
 
-    # Build the loss
+    # Build the loss (pas de class weights ici, le WeightedRandomSampler gère l'équilibrage)
     logging.info("= Loss")
     loss_cfg = config.get("loss", {"class": "CrossEntropyLoss"})
     loss_class_name = loss_cfg["class"]
-    
-    # Move class weights to device
-    class_weights = class_weights.to(device)
-    
+
     if loss_class_name == "FocalLoss":
         loss = optim.FocalLoss(
-            alpha=class_weights,  # Use computed class weights
-            gamma=loss_cfg.get("gamma", 2)
+            alpha=None,
+            gamma=loss_cfg.get("gamma", 1.0)
         )
     else:
-        loss = torch.nn.CrossEntropyLoss(weight=class_weights)
+        loss = torch.nn.CrossEntropyLoss()
 
     # Build the callbacks & logging
     logging_config = config["logging"]
@@ -93,97 +90,106 @@ def train(config):
         f.write(summary_text)
     logging.info(summary_text)
 
-    # Define the early stopping callback (based on validation loss)
+    # Sauvegarde du meilleur modèle basé sur le macro F1 (plus c'est haut, mieux c'est)
     model_checkpoint = utils.ModelCheckpoint(
-        model, str(logdir / "best_model.pt"), min_is_best=True
+        model, str(logdir / "best_model.pt"), min_is_best=False
     )
 
     # ==========================================
-    # PHASE 1 : WARM-UP (Entraînement de la tête)
+    # PHASE 1 : WARM-UP (Entraînement de la tête uniquement)
     # ==========================================
-    logging.info("\n=== DÉBUT PHASE 1 : WARM-UP (Backbone gelé) ===")
-    warmup_epochs = 3 
-    
-    # 1. On s'assure que le backbone est gelé
+    warmup_epochs = config.get("warmup_epochs", 5)
+    head_lr = config.get("optim", {}).get("head_lr", 1e-3)
+    logging.info(f"\n=== PHASE 1 : WARM-UP ({warmup_epochs} epochs, head LR={head_lr}) ===")
+
     for param in model.model.base_model.parameters():
         param.requires_grad = False
-        
-    # 2. On crée un optimiseur UNIQUEMENT pour les paramètres dégelés (la tête)
+
     optimizer_warmup = torch.optim.AdamW(
-        filter(lambda p: p.requires_grad, model.parameters()), 
-        lr=1e-3, 
-        weight_decay=1e-2
+        filter(lambda p: p.requires_grad, model.parameters()),
+        lr=head_lr,
+        weight_decay=1e-2,
     )
 
     for e in range(warmup_epochs):
         train_metrics = utils.train_one_epoch(model, train_loader, loss, optimizer_warmup, device)
         test_metrics = utils.test(model, valid_loader, loss, device)
-        
-        updated = model_checkpoint.update(test_metrics['loss'])
+
+        updated = model_checkpoint.update(test_metrics['f1'])
         logging.info(
             f"[Warm-up {e+1}/{warmup_epochs}] "
-            f"Train Loss: {train_metrics['loss']:.3f} | Train Acc: {train_metrics['accuracy']:.3f} | "
-            f"Val Loss: {test_metrics['loss']:.3f} | Val F1: {test_metrics['f1']:.3f} "
-            f"{'[>> BETTER <<]' if updated else ''}"
+            f"Train Loss: {train_metrics['loss']:.4f} | Train Acc: {train_metrics['accuracy']:.3f} | "
+            f"Val Loss: {test_metrics['loss']:.4f} | Val Macro-F1: {test_metrics['f1']:.4f} "
+            f"{'[BEST]' if updated else ''}"
         )
-        
-        # Enregistrement TensorBoard
+
         tensorboard_writer.add_scalar('Loss/Train', train_metrics['loss'], e)
         tensorboard_writer.add_scalar('Loss/Validation', test_metrics['loss'], e)
-        tensorboard_writer.add_scalar('F1/Validation', test_metrics['f1'], e)
-        tensorboard_writer.add_scalar('Learning_Rate', 1e-3, e)
-
+        tensorboard_writer.add_scalar('MacroF1/Validation', test_metrics['f1'], e)
+        tensorboard_writer.add_scalar('Learning_Rate', head_lr, e)
 
     # ==========================================
-    # PHASE 2 : FINE-TUNING (Entraînement complet)
+    # PHASE 2 : FINE-TUNING avec LR différentiels
     # ==========================================
-    logging.info("\n=== DÉBUT PHASE 2 : FINE-TUNING (Backbone dégelé) ===")
-    
-    # On lit la config pour le scheduler
     optim_config = config.get("optim", {})
-    use_scheduler = optim_config.get("scheduler") == "CosineAnnealing"
-    
-    # 1. On dégèle tout le modèle (Backbone + Tête)
+    backbone_lr = optim_config.get("backbone_lr", 1e-5)
+    finetune_head_lr = optim_config.get("finetune_head_lr", 1e-4)
+    finetune_epochs = config["nepochs"] - warmup_epochs
+
+    logging.info(
+        f"\n=== PHASE 2 : FINE-TUNING ({finetune_epochs} epochs, "
+        f"backbone LR={backbone_lr}, head LR={finetune_head_lr}) ==="
+    )
+
     for param in model.parameters():
         param.requires_grad = True
 
-    # 2. On recrée un NOUVEL optimiseur avec un LR beaucoup plus faible
-    fine_tune_lr = 1e-5
-    optimizer_finetune = torch.optim.AdamW(model.parameters(), lr=fine_tune_lr, weight_decay=1e-2)
+    backbone_params = list(model.model.base_model.parameters())
+    backbone_ids = {id(p) for p in backbone_params}
+    head_params = [p for p in model.parameters() if id(p) not in backbone_ids]
 
-    # 3. On attache le CosineAnnealingLR à ce nouvel optimiseur si demandé
+    optimizer_finetune = torch.optim.AdamW([
+        {"params": backbone_params, "lr": backbone_lr},
+        {"params": head_params, "lr": finetune_head_lr},
+    ], weight_decay=1e-2)
+
+    use_scheduler = optim_config.get("scheduler") == "CosineAnnealing"
     if use_scheduler:
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-            optimizer_finetune, 
-            T_max=config["nepochs"] - warmup_epochs
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
+            optimizer_finetune,
+            T_0=max(finetune_epochs // 3, 5),
+            T_mult=2,
+            eta_min=1e-7,
         )
 
     for e in range(warmup_epochs, config["nepochs"]):
         train_metrics = utils.train_one_epoch(model, train_loader, loss, optimizer_finetune, device)
-        
+
         if use_scheduler:
-            scheduler.step()
-            current_lr = scheduler.get_last_lr()[0]
+            scheduler.step(e - warmup_epochs)
+            current_lr_bb = scheduler.get_last_lr()[0]
+            current_lr_head = scheduler.get_last_lr()[1]
         else:
-            current_lr = fine_tune_lr
+            current_lr_bb = backbone_lr
+            current_lr_head = finetune_head_lr
 
         test_metrics = utils.test(model, valid_loader, loss, device)
-        
-        updated = model_checkpoint.update(test_metrics['loss'])
+
+        updated = model_checkpoint.update(test_metrics['f1'])
         logging.info(
-            f"[Fine-Tune {e+1}/{config['nepochs']}] LR: {current_lr:.6f} | "
-            f"Train Loss: {train_metrics['loss']:.3f} | Train Acc: {train_metrics['accuracy']:.3f} | "
-            f"Val Loss: {test_metrics['loss']:.3f} | Val F1: {test_metrics['f1']:.3f} "
-            f"{'[>> BETTER <<]' if updated else ''}"
+            f"[Fine-Tune {e+1}/{config['nepochs']}] "
+            f"BB-LR: {current_lr_bb:.2e} | Head-LR: {current_lr_head:.2e} | "
+            f"Train Loss: {train_metrics['loss']:.4f} | Train Acc: {train_metrics['accuracy']:.3f} | "
+            f"Val Loss: {test_metrics['loss']:.4f} | Val Macro-F1: {test_metrics['f1']:.4f} "
+            f"{'[BEST]' if updated else ''}"
         )
-        
-        # Enregistrement TensorBoard (suite continue de la courbe)
+
         tensorboard_writer.add_scalar('Loss/Train', train_metrics['loss'], e)
         tensorboard_writer.add_scalar('Loss/Validation', test_metrics['loss'], e)
-        tensorboard_writer.add_scalar('F1/Validation', test_metrics['f1'], e)
-        tensorboard_writer.add_scalar('Learning_Rate', current_lr, e)
+        tensorboard_writer.add_scalar('MacroF1/Validation', test_metrics['f1'], e)
+        tensorboard_writer.add_scalar('LR/Backbone', current_lr_bb, e)
+        tensorboard_writer.add_scalar('LR/Head', current_lr_head, e)
 
-    # Fermeture propre du logger TensorBoard
     tensorboard_writer.close()
     logging.info("=== Entraînement terminé ! ===")
 

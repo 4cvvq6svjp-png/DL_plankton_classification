@@ -114,7 +114,7 @@ def train_one_epoch(model, loader, f_loss, optimizer, device):
 
     # Compute metrics
     accuracy = accuracy_score(all_targets, all_preds)
-    f1 = f1_score(all_targets, all_preds, average='weighted', zero_division=0)
+    f1 = f1_score(all_targets, all_preds, average='macro', zero_division=0)
     
     return {
         'loss': total_loss / num_samples,
@@ -167,7 +167,7 @@ def test(model, loader, f_loss, device):
 
     # Compute metrics
     accuracy = accuracy_score(all_targets, all_preds)
-    f1 = f1_score(all_targets, all_preds, average='weighted', zero_division=0)
+    f1 = f1_score(all_targets, all_preds, average='macro', zero_division=0)
     
     return {
         'loss': total_loss / num_samples,

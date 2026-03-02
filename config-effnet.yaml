@@ -6,7 +6,8 @@ data:
   img_size: 260
   resize_size: 288
 
-nepochs: 18         
+nepochs: 40
+warmup_epochs: 5
 
 logging:
   logdir: "./logs"
@@ -18,10 +19,11 @@ model:
 
 loss:
   class: FocalLoss
-  alpha: 1
-  gamma: 2
+  gamma: 1.0
 
 optim:
   algo: AdamW
-  lr: 0.0001
+  head_lr: 1e-3
+  backbone_lr: 1e-5
+  finetune_head_lr: 1e-4
   scheduler: CosineAnnealing

@@ -118,19 +118,29 @@ def get_dataloaders(data_config, use_cuda):
     train_dataset_wrapped = WrappedDataset(train_dataset, train_transforms)
     valid_dataset_wrapped = WrappedDataset(valid_dataset, valid_transforms)
 
-    # --- CRÉATION DES DATALOADERS ---
-    train_loader = torch.utils.data.DataLoader(
-        train_dataset_wrapped, 
-        batch_size=batch_size, 
-        shuffle=True,      # Le mélange classique suffit pour l'entraînement
-        num_workers=num_workers
+    # --- WeightedRandomSampler pour équilibrer les classes rares ---
+    train_targets = [base_dataset.targets[i] for i in train_indices]
+    class_counts = np.bincount(train_targets)
+    sample_weights = 1.0 / (class_counts[train_targets] + 1e-6)
+    sample_weights = torch.from_numpy(sample_weights).double()
+    sampler = torch.utils.data.WeightedRandomSampler(
+        weights=sample_weights,
+        num_samples=len(sample_weights),
+        replacement=True,
     )
-    
+
+    train_loader = torch.utils.data.DataLoader(
+        train_dataset_wrapped,
+        batch_size=batch_size,
+        sampler=sampler,
+        num_workers=num_workers,
+    )
+
     valid_loader = torch.utils.data.DataLoader(
-        valid_dataset_wrapped, 
-        batch_size=batch_size, 
-        shuffle=False, 
-        num_workers=num_workers
+        valid_dataset_wrapped,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
     )
 
     num_classes = len(base_dataset.classes)

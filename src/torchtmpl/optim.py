@@ -19,17 +19,14 @@ def get_optimizer(cfg, params):
 import torch.nn.functional as F
 
 class FocalLoss(nn.Module):
-    def __init__(self, alpha=None, gamma=2, reduction='mean'):
+    def __init__(self, alpha=None, gamma=1.0, reduction='mean'):
         super(FocalLoss, self).__init__()
-        self.alpha = alpha  # Peut être None, un float, ou un tensor de poids par classe
+        self.alpha = alpha
         self.gamma = gamma
         self.reduction = reduction
 
     def forward(self, inputs, targets):
-        # Cross-entropy avec poids optionnels par classe
         ce_loss = F.cross_entropy(inputs, targets, reduction='none', weight=self.alpha)
-        
-        # Focal loss avec probability adjustment
         pt = torch.exp(-ce_loss)
         focal_loss = (1 - pt) ** self.gamma * ce_loss
 
