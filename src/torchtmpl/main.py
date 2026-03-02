@@ -5,6 +5,7 @@ import logging
 import sys
 import os
 import pathlib
+import signal
 
 # External imports
 import yaml
@@ -20,6 +21,26 @@ from . import data
 from . import models
 from . import optim
 from . import utils
+
+
+_SIGTERM_RECEIVED = False
+
+
+def _sigterm_handler(signum, frame):
+    global _SIGTERM_RECEIVED
+    _SIGTERM_RECEIVED = True
+    logging.warning("SIGTERM reçu — sauvegarde en cours avant arrêt...")
+
+
+def _save_last_checkpoint(model, optimizer, scheduler_state, epoch, logdir):
+    path = str(logdir / "last_checkpoint.pt")
+    torch.save({
+        "epoch": epoch,
+        "model_state_dict": model.state_dict(),
+        "optimizer_state_dict": optimizer.state_dict(),
+        "scheduler_state_dict": scheduler_state,
+    }, path)
+    logging.info(f"Checkpoint sauvegardé : {path} (epoch {epoch+1})")
 
 
 def train(config):
@@ -95,6 +116,9 @@ def train(config):
         model, str(logdir / "best_model.pt"), min_is_best=False
     )
 
+    signal.signal(signal.SIGTERM, _sigterm_handler)
+    checkpoint_every = config.get("checkpoint_every", 5)
+
     # ==========================================
     # PHASE 1 : WARM-UP (Entraînement de la tête uniquement)
     # ==========================================
@@ -127,6 +151,12 @@ def train(config):
         tensorboard_writer.add_scalar('Loss/Validation', test_metrics['loss'], e)
         tensorboard_writer.add_scalar('MacroF1/Validation', test_metrics['f1'], e)
         tensorboard_writer.add_scalar('Learning_Rate', head_lr, e)
+
+        if _SIGTERM_RECEIVED:
+            logging.warning(f"Arrêt anticipé après warm-up epoch {e+1} (SIGTERM)")
+            _save_last_checkpoint(model, optimizer_warmup, None, e, logdir)
+            tensorboard_writer.close()
+            return
 
     # ==========================================
     # PHASE 2 : FINE-TUNING avec LR différentiels
@@ -189,6 +219,16 @@ def train(config):
         tensorboard_writer.add_scalar('MacroF1/Validation', test_metrics['f1'], e)
         tensorboard_writer.add_scalar('LR/Backbone', current_lr_bb, e)
         tensorboard_writer.add_scalar('LR/Head', current_lr_head, e)
+
+        sched_state = scheduler.state_dict() if use_scheduler else None
+        if (e + 1) % checkpoint_every == 0:
+            _save_last_checkpoint(model, optimizer_finetune, sched_state, e, logdir)
+
+        if _SIGTERM_RECEIVED:
+            logging.warning(f"Arrêt anticipé après epoch {e+1} (SIGTERM)")
+            _save_last_checkpoint(model, optimizer_finetune, sched_state, e, logdir)
+            tensorboard_writer.close()
+            return
 
     tensorboard_writer.close()
     logging.info("=== Entraînement terminé ! ===")
