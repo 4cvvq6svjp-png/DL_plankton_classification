@@ -24,8 +24,12 @@ def generate_submission(config, checkpoint_path):
     if not os.path.exists(test_dir):
         raise FileNotFoundError(f"Le dossier test est introuvable : {test_dir}")
 
-    # Les mêmes transformations qu'à l'entraînement (sans l'augmentation)
-    preprocess_transforms = custom_transforms.get_transforms(split="test", img_size=224)
+    # Même résolution qu'à l'entraînement (lue depuis la config)
+    img_size = data_config.get("img_size", 224)
+    resize_size = data_config.get("resize_size", 256)
+    preprocess_transforms = custom_transforms.get_transforms(
+        split="test", img_size=img_size, resize_size=resize_size
+    )
 
     test_dataset = data.KaggleTestDataset(test_dir, transform=preprocess_transforms)
     test_loader = torch.utils.data.DataLoader(
@@ -38,11 +42,11 @@ def generate_submission(config, checkpoint_path):
     logging.info(f"Loaded {len(test_dataset)} images for prediction.")
 
     # 2. Chargement du modèle
-    # Attention: Il faut donner le bon nombre de classes ! 
-    # Remplace 86 par le vrai nombre de classes de ton dataset d'entraînement.
-    num_classes = 86 
-    
-    model = models.build_model(config["model"], (3, 224, 224), num_classes)
+    # Nombre de classes : depuis la config, ou 86 par défaut (doit correspondre à l'entraînement)
+    num_classes = config.get("num_classes", 86)
+
+    input_size = (3, img_size, img_size)
+    model = models.build_model(config["model"], input_size, num_classes)
     
     logging.info(f"Loading weights from {checkpoint_path}")
     # CHARGEMENT CORRIGÉ :
