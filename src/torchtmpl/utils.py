@@ -1,9 +1,8 @@
 # coding: utf-8
 
-# Standard imports
 import os
 
-# External imports
+import numpy as np
 import torch
 import torch.nn
 import tqdm
@@ -11,15 +10,6 @@ from sklearn.metrics import accuracy_score, f1_score
 
 
 def generate_unique_logpath(logdir, raw_run_name):
-    """
-    Generate a unique directory name
-    Argument:
-        logdir: the prefix directory
-        raw_run_name(str): the base name
-    Returns:
-        log_path: a non-existent path like logdir/raw_run_name_xxxx
-                  where xxxx is an int
-    """
     i = 0
     while True:
         run_name = raw_run_name + "_" + str(i)
@@ -30,16 +20,8 @@ def generate_unique_logpath(logdir, raw_run_name):
 
 
 class ModelCheckpoint(object):
-    """
-    Early stopping callback
-    """
 
-    def __init__(
-        self,
-        model: torch.nn.Module,
-        savepath,
-        min_is_best: bool = True,
-    ) -> None:
+    def __init__(self, model, savepath, min_is_best=True):
         self.model = model
         self.savepath = savepath
         self.best_score = None
@@ -62,115 +44,124 @@ class ModelCheckpoint(object):
         return False
 
 
-def train_one_epoch(model, loader, f_loss, optimizer, device):
-    """
-    Train a model for one epoch, iterating over the loader
-    using the f_loss to compute the loss and the optimizer
-    to update the parameters of the model.
-    Arguments :
-        model     -- A torch.nn.Module object
-        loader    -- A torch.utils.data.DataLoader
-        f_loss    -- The loss function, i.e. a loss Module
-        optimizer -- A torch.optim.Optimzer object
-        device    -- A torch.device
+# ──────────────────────────────────────────────
+#  Mixup / CutMix helpers
+# ──────────────────────────────────────────────
 
-    Returns :
-        Dictionary with loss, accuracy, and F1-score
-    """
+def mixup_data(x, y, alpha=0.2):
+    lam = np.random.beta(alpha, alpha)
+    index = torch.randperm(x.size(0), device=x.device)
+    mixed_x = lam * x + (1 - lam) * x[index]
+    return mixed_x, y, y[index], lam
 
-    # We enter train mode.
-    # This is important for layers such as dropout, batchnorm, ...
+
+def cutmix_data(x, y, alpha=1.0):
+    lam = np.random.beta(alpha, alpha)
+    index = torch.randperm(x.size(0), device=x.device)
+
+    _, _, H, W = x.shape
+    cut_ratio = np.sqrt(1.0 - lam)
+    cut_h, cut_w = int(H * cut_ratio), int(W * cut_ratio)
+
+    cy, cx = np.random.randint(H), np.random.randint(W)
+    y1 = np.clip(cy - cut_h // 2, 0, H)
+    y2 = np.clip(cy + cut_h // 2, 0, H)
+    x1 = np.clip(cx - cut_w // 2, 0, W)
+    x2 = np.clip(cx + cut_w // 2, 0, W)
+
+    mixed_x = x.clone()
+    mixed_x[:, :, y1:y2, x1:x2] = x[index, :, y1:y2, x1:x2]
+    lam = 1.0 - (y2 - y1) * (x2 - x1) / (H * W)
+    return mixed_x, y, y[index], lam
+
+
+# ──────────────────────────────────────────────
+#  Training loop (one epoch)
+# ──────────────────────────────────────────────
+
+def train_one_epoch(model, loader, f_loss, optimizer, device,
+                    scaler=None, mixup_alpha=0.0, cutmix_alpha=0.0, mix_prob=0.5):
     model.train()
 
     total_loss = 0
     num_samples = 0
     all_preds = []
     all_targets = []
-    
-    for i, (inputs, targets) in (pbar := tqdm.tqdm(enumerate(loader))):
+    use_mix = (mixup_alpha > 0 or cutmix_alpha > 0)
 
+    for inputs, targets in (pbar := tqdm.tqdm(loader, desc="Train")):
         inputs, targets = inputs.to(device), targets.to(device)
 
-        # Compute the forward propagation
-        outputs = model(inputs)
+        targets_a, targets_b, lam = targets, targets, 1.0
+        if use_mix and np.random.rand() < mix_prob:
+            use_cutmix = cutmix_alpha > 0 and (mixup_alpha <= 0 or np.random.rand() < 0.5)
+            if use_cutmix:
+                inputs, targets_a, targets_b, lam = cutmix_data(inputs, targets, cutmix_alpha)
+            else:
+                inputs, targets_a, targets_b, lam = mixup_data(inputs, targets, mixup_alpha)
 
-        loss = f_loss(outputs, targets)
+        with torch.amp.autocast("cuda", enabled=scaler is not None):
+            outputs = model(inputs)
+            loss = lam * f_loss(outputs, targets_a) + (1 - lam) * f_loss(outputs, targets_b)
 
-        # Backward and optimize
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+        optimizer.zero_grad(set_to_none=True)
 
-        # Update the metrics
+        if scaler is not None:
+            scaler.scale(loss).backward()
+            scaler.unscale_(optimizer)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            scaler.step(optimizer)
+            scaler.update()
+        else:
+            loss.backward()
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            optimizer.step()
+
         total_loss += inputs.shape[0] * loss.item()
         num_samples += inputs.shape[0]
-        
-        # Collect predictions for accuracy/F1
+
         preds = torch.argmax(outputs, dim=1).cpu().numpy()
         all_preds.extend(preds)
-        all_targets.extend(targets.cpu().numpy())
-        
-        pbar.set_description(f"Train loss : {total_loss/num_samples:.2f}")
+        all_targets.extend(targets_a.cpu().numpy())
 
-    # Compute metrics
+        pbar.set_description(f"Train loss : {total_loss / num_samples:.4f}")
+
     accuracy = accuracy_score(all_targets, all_preds)
     f1 = f1_score(all_targets, all_preds, average='macro', zero_division=0)
-    
+
     return {
         'loss': total_loss / num_samples,
         'accuracy': accuracy,
-        'f1': f1
+        'f1': f1,
     }
 
 
 def test(model, loader, f_loss, device):
-    """
-    Test a model over the loader
-    using the f_loss as metrics
-    Arguments :
-        model     -- A torch.nn.Module object
-        loader    -- A torch.utils.data.DataLoader
-        f_loss    -- The loss function, i.e. a loss Module
-        device    -- A torch.device
-
-    Returns :
-        Dictionary with loss, accuracy, and F1-score
-    """
-
-    # We enter eval mode.
-    # This is important for layers such as dropout, batchnorm, ...
     model.eval()
 
     total_loss = 0
     num_samples = 0
     all_preds = []
     all_targets = []
-    
+
     with torch.no_grad():
         for inputs, targets in loader:
-
             inputs, targets = inputs.to(device), targets.to(device)
-
-            # Compute the forward propagation
             outputs = model(inputs)
-
             loss = f_loss(outputs, targets)
 
-            # Update the metrics
             total_loss += inputs.shape[0] * loss.item()
             num_samples += inputs.shape[0]
-            
-            # Collect predictions for accuracy/F1
+
             preds = torch.argmax(outputs, dim=1).cpu().numpy()
             all_preds.extend(preds)
             all_targets.extend(targets.cpu().numpy())
 
-    # Compute metrics
     accuracy = accuracy_score(all_targets, all_preds)
     f1 = f1_score(all_targets, all_preds, average='macro', zero_division=0)
-    
+
     return {
         'loss': total_loss / num_samples,
         'accuracy': accuracy,
-        'f1': f1
+        'f1': f1,
     }

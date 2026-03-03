@@ -13,7 +13,8 @@ dependencies = [
     "tqdm>=4.65.0",
     "matplotlib>=3.7.1",
     "gdown>=5.2.0",
-    "scikit-learn>=1.0"
+    "scikit-learn>=1.0",
+    "transformers>=4.30.0"
 ]
 
 [options]

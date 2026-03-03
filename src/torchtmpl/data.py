@@ -118,10 +118,14 @@ def get_dataloaders(data_config, use_cuda):
     train_dataset_wrapped = WrappedDataset(train_dataset, train_transforms)
     valid_dataset_wrapped = WrappedDataset(valid_dataset, valid_transforms)
 
-    # --- WeightedRandomSampler pour équilibrer les classes rares ---
+    # --- WeightedRandomSampler avec dampening configurable ---
+    # power=1.0 → distribution uniforme forcée (trop agressif)
+    # power=0.5 → racine carrée (boost doux des classes rares)
+    # power=0.0 → pas de rééquilibrage
+    sampler_power = data_config.get("sampler_power", 0.5)
     train_targets = [base_dataset.targets[i] for i in train_indices]
     class_counts = np.bincount(train_targets)
-    sample_weights = 1.0 / (class_counts[train_targets] + 1e-6)
+    sample_weights = 1.0 / ((class_counts[train_targets] + 1e-6) ** sampler_power)
     sample_weights = torch.from_numpy(sample_weights).double()
     sampler = torch.utils.data.WeightedRandomSampler(
         weights=sample_weights,
@@ -154,20 +158,12 @@ def get_dataloaders(data_config, use_cuda):
 
 def compute_class_weights(train_indices, base_dataset):
     """
-    Compute class weights for handling imbalanced datasets.
-    Weights are inversely proportional to class frequency.
-    
-    Arguments:
-        train_indices: indices of training samples
-        base_dataset: the base dataset with .targets attribute
-    
-    Returns:
-        torch.Tensor: class weights (num_classes,)
+    Compute per-class weights for the loss function (inverse sqrt frequency).
+    Normalized so weights sum to num_classes.
     """
     train_targets = [base_dataset.targets[i] for i in train_indices]
     class_counts = np.bincount(train_targets)
-    class_weights = 1.0 / (class_counts + 1e-6)
-    # Normalize so weights sum to num_classes
+    class_weights = 1.0 / np.sqrt(class_counts + 1e-6)
     class_weights = class_weights / class_weights.sum() * len(class_weights)
     return torch.tensor(class_weights, dtype=torch.float32)
 

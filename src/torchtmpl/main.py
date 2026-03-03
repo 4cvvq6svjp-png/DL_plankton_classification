@@ -1,22 +1,17 @@
 # coding: utf-8
 
-# Standard imports
 import logging
 import sys
 import os
 import pathlib
 import signal
 
-# External imports
 import yaml
-import wandb
 import torch
 import torchinfo.torchinfo as torchinfo
 from torch.utils.tensorboard import SummaryWriter
 import datetime
 
-
-# Local imports
 from . import data
 from . import models
 from . import optim
@@ -40,78 +35,84 @@ def _save_last_checkpoint(model, optimizer, scheduler_state, epoch, logdir):
         "optimizer_state_dict": optimizer.state_dict(),
         "scheduler_state_dict": scheduler_state,
     }, path)
-    logging.info(f"Checkpoint sauvegardé : {path} (epoch {epoch+1})")
+    logging.info(f"Checkpoint sauvegardé : {path} (epoch {epoch + 1})")
 
 
 def train(config):
     use_cuda = torch.cuda.is_available()
     device = torch.device("cuda") if use_cuda else torch.device("cpu")
 
-    # Build the dataloaders
+    # ── Data ──────────────────────────────────
     logging.info("= Building the dataloaders")
     data_config = config["data"]
+    train_loader, valid_loader, input_size, num_classes, class_weights = \
+        data.get_dataloaders(data_config, use_cuda)
 
-    train_loader, valid_loader, input_size, num_classes, class_weights = data.get_dataloaders(
-        data_config, use_cuda
-    )
-
-    # Build the model
+    # ── Model ─────────────────────────────────
     logging.info("= Model")
     model_config = config["model"]
     model = models.build_model(model_config, input_size, num_classes)
     model.to(device)
 
-    # Build the loss (pas de class weights ici, le WeightedRandomSampler gère l'équilibrage)
+    # ── Resume from checkpoint ────────────────
+    resume_cfg = config.get("resume", {})
+    resume_path = resume_cfg.get("checkpoint", None)
+    resumed = False
+    if resume_path and os.path.exists(resume_path):
+        ckpt = torch.load(resume_path, map_location=device, weights_only=True)
+        if isinstance(ckpt, dict) and "model_state_dict" in ckpt:
+            model.load_state_dict(ckpt["model_state_dict"])
+        else:
+            model.load_state_dict(ckpt)
+        resumed = True
+        logging.info(f"  ✓ Poids chargés depuis {resume_path}")
+
+    # ── Loss ──────────────────────────────────
     logging.info("= Loss")
     loss_cfg = config.get("loss", {"class": "CrossEntropyLoss"})
-    loss_class_name = loss_cfg["class"]
+    loss_class_name = loss_cfg.get("class", "CrossEntropyLoss")
 
     if loss_class_name == "FocalLoss":
-        loss = optim.FocalLoss(
-            alpha=None,
-            gamma=loss_cfg.get("gamma", 1.0)
+        use_alpha = loss_cfg.get("use_class_weights", True)
+        alpha = class_weights.to(device) if use_alpha else None
+        loss_fn = optim.FocalLoss(
+            alpha=alpha,
+            gamma=loss_cfg.get("gamma", 2.0),
+            label_smoothing=loss_cfg.get("label_smoothing", 0.0),
         )
     else:
-        loss = torch.nn.CrossEntropyLoss()
+        loss_fn = torch.nn.CrossEntropyLoss()
 
-    # Build the callbacks & logging
+    # ── Logging ───────────────────────────────
     logging_config = config["logging"]
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     logname = f"{model_config['class']}_{timestamp}"
-    
+
     logdir = utils.generate_unique_logpath(logging_config["logdir"], logname)
-    if not os.path.isdir(logdir):
-        os.makedirs(logdir)
+    os.makedirs(logdir, exist_ok=True)
     logging.info(f"Will be logging into {logdir}")
 
     tensorboard_writer = SummaryWriter(logdir)
-
-    # Copy the config file into the logdir
     logdir = pathlib.Path(logdir)
-    with open(logdir / "config.yaml", "w") as file:
-        yaml.dump(config, file)
+    with open(logdir / "config.yaml", "w") as f:
+        yaml.dump(config, f)
 
-    # Make a summary script of the experiment
-    input_size = next(iter(train_loader))[0].shape
+    input_size_batch = next(iter(train_loader))[0].shape
     summary_text = (
         f"Logdir : {logdir}\n"
-        + "## Command \n"
-        + " ".join(sys.argv)
-        + "\n\n"
-        + f" Config : {config} \n\n"
-        + "## Summary of the model architecture\n"
-        + f"{torchinfo.summary(model, input_size=input_size)}\n\n"
-        + "## Loss\n\n"
-        + f"{loss}\n\n"
-        + "## Datasets : \n"
-        + f"Train : {train_loader.dataset}\n"
-        + f"Validation : {valid_loader.dataset}"
+        f"## Command \n{' '.join(sys.argv)}\n\n"
+        f" Config : {config} \n\n"
+        f"## Summary of the model architecture\n"
+        f"{torchinfo.summary(model, input_size=input_size_batch)}\n\n"
+        f"## Loss\n\n{loss_fn}\n\n"
+        f"## Datasets : \n"
+        f"Train : {train_loader.dataset}\n"
+        f"Validation : {valid_loader.dataset}"
     )
     with open(logdir / "summary.txt", "w") as f:
         f.write(summary_text)
     logging.info(summary_text)
 
-    # Sauvegarde du meilleur modèle basé sur le macro F1 (plus c'est haut, mieux c'est)
     model_checkpoint = utils.ModelCheckpoint(
         model, str(logdir / "best_model.pt"), min_is_best=False
     )
@@ -119,120 +120,161 @@ def train(config):
     signal.signal(signal.SIGTERM, _sigterm_handler)
     checkpoint_every = config.get("checkpoint_every", 5)
 
-    # ==========================================
-    # PHASE 1 : WARM-UP (Entraînement de la tête uniquement)
-    # ==========================================
-    warmup_epochs = config.get("warmup_epochs", 5)
-    head_lr = float(config.get("optim", {}).get("head_lr", 1e-3))
-    logging.info(f"\n=== PHASE 1 : WARM-UP ({warmup_epochs} epochs, head LR={head_lr}) ===")
+    # ── AMP ───────────────────────────────────
+    use_amp = config.get("use_amp", True) and use_cuda
+    scaler = torch.amp.GradScaler("cuda") if use_amp else None
 
-    for param in model.model.base_model.parameters():
-        param.requires_grad = False
+    # ── Mixup / CutMix config ─────────────────
+    mix_cfg = config.get("mix", {})
+    mixup_alpha = mix_cfg.get("mixup_alpha", 0.0)
+    cutmix_alpha = mix_cfg.get("cutmix_alpha", 0.0)
+    mix_prob = mix_cfg.get("prob", 0.5)
 
-    optimizer_warmup = torch.optim.AdamW(
-        filter(lambda p: p.requires_grad, model.parameters()),
-        lr=head_lr,
-        weight_decay=1e-2,
-    )
+    # ── Detect transfer learning model ────────
+    has_backbone = hasattr(model, 'model') and hasattr(model.model, 'base_model')
+    optim_config = config.get("optim", {})
 
-    for e in range(warmup_epochs):
-        train_metrics = utils.train_one_epoch(model, train_loader, loss, optimizer_warmup, device)
-        test_metrics = utils.test(model, valid_loader, loss, device)
+    # ══════════════════════════════════════════
+    #  PHASE 1 : WARM-UP (head only) — skip if resuming
+    # ══════════════════════════════════════════
+    warmup_epochs = 0 if resumed else config.get("warmup_epochs", 0)
+    global_epoch = 0
 
-        updated = model_checkpoint.update(test_metrics['f1'])
-        logging.info(
-            f"[Warm-up {e+1}/{warmup_epochs}] "
-            f"Train Loss: {train_metrics['loss']:.4f} | Train Acc: {train_metrics['accuracy']:.3f} | "
-            f"Val Loss: {test_metrics['loss']:.4f} | Val Macro-F1: {test_metrics['f1']:.4f} "
-            f"{'[BEST]' if updated else ''}"
+    if warmup_epochs > 0 and has_backbone:
+        head_lr = float(optim_config.get("head_lr", 1e-3))
+        logging.info(f"\n=== PHASE 1 : WARM-UP ({warmup_epochs} epochs, head LR={head_lr}) ===")
+
+        for param in model.model.base_model.parameters():
+            param.requires_grad = False
+
+        optimizer_warmup = torch.optim.AdamW(
+            filter(lambda p: p.requires_grad, model.parameters()),
+            lr=head_lr, weight_decay=0.01,
         )
 
-        tensorboard_writer.add_scalar('Loss/Train', train_metrics['loss'], e)
-        tensorboard_writer.add_scalar('Loss/Validation', test_metrics['loss'], e)
-        tensorboard_writer.add_scalar('MacroF1/Validation', test_metrics['f1'], e)
-        tensorboard_writer.add_scalar('Learning_Rate', head_lr, e)
+        for e in range(warmup_epochs):
+            train_metrics = utils.train_one_epoch(
+                model, train_loader, loss_fn, optimizer_warmup, device,
+                scaler=scaler, mixup_alpha=mixup_alpha,
+                cutmix_alpha=cutmix_alpha, mix_prob=mix_prob,
+            )
+            test_metrics = utils.test(model, valid_loader, loss_fn, device)
 
-        if _SIGTERM_RECEIVED:
-            logging.warning(f"Arrêt anticipé après warm-up epoch {e+1} (SIGTERM)")
-            _save_last_checkpoint(model, optimizer_warmup, None, e, logdir)
-            tensorboard_writer.close()
-            return
+            updated = model_checkpoint.update(test_metrics['f1'])
+            logging.info(
+                f"[Warm-up {e + 1}/{warmup_epochs}] "
+                f"Train Loss: {train_metrics['loss']:.4f} | Train Acc: {train_metrics['accuracy']:.3f} | "
+                f"Val Loss: {test_metrics['loss']:.4f} | Val Macro-F1: {test_metrics['f1']:.4f} "
+                f"{'[BEST]' if updated else ''}"
+            )
 
-    # ==========================================
-    # PHASE 2 : FINE-TUNING avec LR différentiels
-    # ==========================================
-    optim_config = config.get("optim", {})
-    backbone_lr = float(optim_config.get("backbone_lr", 1e-5))
-    finetune_head_lr = float(optim_config.get("finetune_head_lr", 1e-4))
+            tensorboard_writer.add_scalar('Loss/Train', train_metrics['loss'], e)
+            tensorboard_writer.add_scalar('Loss/Validation', test_metrics['loss'], e)
+            tensorboard_writer.add_scalar('MacroF1/Validation', test_metrics['f1'], e)
+
+            if _SIGTERM_RECEIVED:
+                _save_last_checkpoint(model, optimizer_warmup, None, e, logdir)
+                tensorboard_writer.close()
+                return
+
+            global_epoch += 1
+
+        for param in model.parameters():
+            param.requires_grad = True
+
+    # ══════════════════════════════════════════
+    #  PHASE 2 : FINE-TUNING (or full training)
+    # ══════════════════════════════════════════
     finetune_epochs = config["nepochs"] - warmup_epochs
 
-    logging.info(
-        f"\n=== PHASE 2 : FINE-TUNING ({finetune_epochs} epochs, "
-        f"backbone LR={backbone_lr}, head LR={finetune_head_lr}) ==="
+    if has_backbone:
+        backbone_lr = float(optim_config.get("backbone_lr", 1e-5))
+        finetune_head_lr = float(optim_config.get("finetune_head_lr", 1e-4))
+        weight_decay = float(optim_config.get("weight_decay", 0.05))
+
+        backbone_params = list(model.model.base_model.parameters())
+        backbone_ids = {id(p) for p in backbone_params}
+        head_params = [p for p in model.parameters() if id(p) not in backbone_ids]
+
+        optimizer = torch.optim.AdamW([
+            {"params": backbone_params, "lr": backbone_lr},
+            {"params": head_params, "lr": finetune_head_lr},
+        ], weight_decay=weight_decay)
+
+        logging.info(
+            f"\n=== PHASE 2 : FINE-TUNING ({finetune_epochs} epochs, "
+            f"backbone LR={backbone_lr}, head LR={finetune_head_lr}, "
+            f"weight_decay={weight_decay}) ==="
+        )
+    else:
+        optimizer = optim.get_optimizer(optim_config, model.parameters())
+        logging.info(f"\n=== TRAINING ({finetune_epochs} epochs) ===")
+
+    # Simple CosineAnnealingLR — no restarts for stable convergence
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer,
+        T_max=finetune_epochs,
+        eta_min=float(optim_config.get("eta_min", 1e-7)),
     )
 
-    for param in model.parameters():
-        param.requires_grad = True
+    for e in range(finetune_epochs):
+        epoch_num = warmup_epochs + e
 
-    backbone_params = list(model.model.base_model.parameters())
-    backbone_ids = {id(p) for p in backbone_params}
-    head_params = [p for p in model.parameters() if id(p) not in backbone_ids]
-
-    optimizer_finetune = torch.optim.AdamW([
-        {"params": backbone_params, "lr": backbone_lr},
-        {"params": head_params, "lr": finetune_head_lr},
-    ], weight_decay=1e-2)
-
-    use_scheduler = optim_config.get("scheduler") == "CosineAnnealing"
-    if use_scheduler:
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingWarmRestarts(
-            optimizer_finetune,
-            T_0=max(finetune_epochs // 3, 5),
-            T_mult=2,
-            eta_min=1e-7,
+        train_metrics = utils.train_one_epoch(
+            model, train_loader, loss_fn, optimizer, device,
+            scaler=scaler, mixup_alpha=mixup_alpha,
+            cutmix_alpha=cutmix_alpha, mix_prob=mix_prob,
         )
 
-    for e in range(warmup_epochs, config["nepochs"]):
-        train_metrics = utils.train_one_epoch(model, train_loader, loss, optimizer_finetune, device)
+        scheduler.step()
 
-        if use_scheduler:
-            scheduler.step(e - warmup_epochs)
-            current_lr_bb = scheduler.get_last_lr()[0]
-            current_lr_head = scheduler.get_last_lr()[1]
+        if has_backbone:
+            current_lr_bb = optimizer.param_groups[0]["lr"]
+            current_lr_head = optimizer.param_groups[1]["lr"]
         else:
-            current_lr_bb = backbone_lr
-            current_lr_head = finetune_head_lr
+            current_lr_bb = optimizer.param_groups[0]["lr"]
+            current_lr_head = current_lr_bb
 
-        test_metrics = utils.test(model, valid_loader, loss, device)
-
+        test_metrics = utils.test(model, valid_loader, loss_fn, device)
         updated = model_checkpoint.update(test_metrics['f1'])
-        logging.info(
-            f"[Fine-Tune {e+1}/{config['nepochs']}] "
-            f"BB-LR: {current_lr_bb:.2e} | Head-LR: {current_lr_head:.2e} | "
-            f"Train Loss: {train_metrics['loss']:.4f} | Train Acc: {train_metrics['accuracy']:.3f} | "
-            f"Val Loss: {test_metrics['loss']:.4f} | Val Macro-F1: {test_metrics['f1']:.4f} "
-            f"{'[BEST]' if updated else ''}"
-        )
 
-        tensorboard_writer.add_scalar('Loss/Train', train_metrics['loss'], e)
-        tensorboard_writer.add_scalar('Loss/Validation', test_metrics['loss'], e)
-        tensorboard_writer.add_scalar('MacroF1/Validation', test_metrics['f1'], e)
-        tensorboard_writer.add_scalar('LR/Backbone', current_lr_bb, e)
-        tensorboard_writer.add_scalar('LR/Head', current_lr_head, e)
+        if has_backbone:
+            logging.info(
+                f"[Fine-Tune {epoch_num + 1}/{config['nepochs']}] "
+                f"BB-LR: {current_lr_bb:.2e} | Head-LR: {current_lr_head:.2e} | "
+                f"Train Loss: {train_metrics['loss']:.4f} | Train Acc: {train_metrics['accuracy']:.3f} | "
+                f"Val Loss: {test_metrics['loss']:.4f} | Val Macro-F1: {test_metrics['f1']:.4f} "
+                f"{'[BEST]' if updated else ''}"
+            )
+        else:
+            logging.info(
+                f"[{epoch_num + 1}/{config['nepochs']}] "
+                f"Train loss={train_metrics['loss']:.4f} F1={train_metrics['f1']:.4f} | "
+                f"Val loss={test_metrics['loss']:.4f} F1={test_metrics['f1']:.4f} | "
+                f"LR={current_lr_bb:.2e} "
+                f"{'★ BEST' if updated else ''}"
+            )
 
-        sched_state = scheduler.state_dict() if use_scheduler else None
-        if (e + 1) % checkpoint_every == 0:
-            _save_last_checkpoint(model, optimizer_finetune, sched_state, e, logdir)
+        tensorboard_writer.add_scalar('Loss/Train', train_metrics['loss'], global_epoch)
+        tensorboard_writer.add_scalar('Loss/Validation', test_metrics['loss'], global_epoch)
+        tensorboard_writer.add_scalar('MacroF1/Validation', test_metrics['f1'], global_epoch)
+        tensorboard_writer.add_scalar('LR/Backbone', current_lr_bb, global_epoch)
+        tensorboard_writer.add_scalar('LR/Head', current_lr_head, global_epoch)
+
+        sched_state = scheduler.state_dict()
+        if (epoch_num + 1) % checkpoint_every == 0:
+            _save_last_checkpoint(model, optimizer, sched_state, epoch_num, logdir)
 
         if _SIGTERM_RECEIVED:
-            logging.warning(f"Arrêt anticipé après epoch {e+1} (SIGTERM)")
-            _save_last_checkpoint(model, optimizer_finetune, sched_state, e, logdir)
+            _save_last_checkpoint(model, optimizer, sched_state, epoch_num, logdir)
             tensorboard_writer.close()
             return
 
-    tensorboard_writer.close()
-    logging.info("=== Entraînement terminé ! ===")
+        global_epoch += 1
 
+    tensorboard_writer.close()
+    logging.info(f"Best val macro-F1: {model_checkpoint.best_score:.4f}")
+    logging.info("=== Entraînement terminé ! ===")
 
 
 def test(config):
