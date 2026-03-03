@@ -215,8 +215,10 @@ class KaggleTestDataset(torch.utils.data.Dataset):
     def __init__(self, root_dir, transform=None):
         self.root_dir = root_dir
         self.transform = transform
-        # On liste toutes les images du dossier
-        self.images = [f for f in os.listdir(root_dir) if f.lower().endswith(('.png', '.jpg', '.jpeg'))]
+        # Ordre trié pour reproductibilité et alignement avec l'ordre souvent attendu par Kaggle
+        self.images = sorted(
+            f for f in os.listdir(root_dir) if f.lower().endswith(('.png', '.jpg', '.jpeg'))
+        )
         
     def __len__(self):
         return len(self.images)

@@ -79,12 +79,13 @@ def generate_submission(config, checkpoint_path):
             all_predictions.extend(predicted_classes.cpu().numpy())
             
 
-    # 4. Sauvegarde du fichier CSV
+    # 4. Sauvegarde du fichier CSV (tri par imgname pour correspondre à l'ordre attendu par Kaggle)
     df = pd.DataFrame({
         "imgname": all_filenames,
         "label": all_predictions
     })
-    
+    df = df.sort_values("imgname").reset_index(drop=True)
+
     output_filename = "submission.csv"
     df.to_csv(output_filename, index=False)
     logging.info(f"Success! Predictions saved to {output_filename}")
