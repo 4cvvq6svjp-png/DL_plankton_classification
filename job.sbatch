@@ -20,9 +20,9 @@ date
 mkdir $TMPDIR/code
 rsync -r --exclude logs --exclude logslurms --exclude configs . $TMPDIR/code
 
-echo "Checking out the correct version of the code commit_id 69583e332973773fadc045c14302f1e5cb1f962f"
+echo "Checking out the correct version of the code commit_id b3f59a238dae827b4d39631b60ea34dde6042c2c"
 cd $TMPDIR/code
-git checkout 69583e332973773fadc045c14302f1e5cb1f962f
+git checkout b3f59a238dae827b4d39631b60ea34dde6042c2c
 
 
 echo "Setting up the virtual environment"
@@ -33,7 +33,7 @@ source $TMPDIR/venv/bin/activate
 python -m pip install .
 
 echo "Training"
-python -m torchtmpl.main /usr/users/sdim/sdim_2/dl_plankton_team7/configs/tmp14t_d9ta-config.yml train
+python -m torchtmpl.main /usr/users/sdim/sdim_2/dl_plankton_team7/configs/tmp2xb_xgpd-config.yml train
 
 # MODIFICATION : On stocke le code de sortie pour rapatrier les logs MÊME si ça a planté
 TRAIN_EXIT_CODE=$?
