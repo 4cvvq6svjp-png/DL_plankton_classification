@@ -5,9 +5,14 @@ data:
   valid_ratio: 0.2
   img_size: 224
   resize_size: 256
+  sampler_power: 0.5
 
-nepochs: 40
-warmup_epochs: 5
+nepochs: 55
+warmup_epochs: 0
+
+# Reprendre depuis les poids du run précédent (ConvNeXt gamma=1.0)
+resume:
+  checkpoint: "./logs/HfModel_20260302_133002_0/best_model.pt"
 
 logging:
   logdir: "./logs"
@@ -19,11 +24,18 @@ model:
 
 loss:
   class: FocalLoss
-  gamma: 1.0
+  gamma: 2.0
+  label_smoothing: 0.1
+  use_class_weights: true
 
 optim:
   algo: AdamW
   head_lr: 0.001
   backbone_lr: 0.00001
   finetune_head_lr: 0.0001
-  scheduler: CosineAnnealing
+  weight_decay: 0.05
+
+mix:
+  mixup_alpha: 0.2
+  cutmix_alpha: 1.0
+  prob: 0.5
