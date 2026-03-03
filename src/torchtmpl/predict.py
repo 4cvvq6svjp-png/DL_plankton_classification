@@ -45,7 +45,16 @@ def generate_submission(config, checkpoint_path):
     model = models.build_model(config["model"], (3, 224, 224), num_classes)
     
     logging.info(f"Loading weights from {checkpoint_path}")
-    model.load_state_dict(torch.load(checkpoint_path, map_location=device))
+    # CHARGEMENT CORRIGÉ :
+    checkpoint = torch.load(checkpoint_path, map_location=device)
+    
+    # On vérifie si c'est un dictionnaire de checkpoint ou juste les poids
+    if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
+        state_dict = checkpoint["model_state_dict"]
+    else:
+        state_dict = checkpoint
+
+    model.load_state_dict(state_dict)
     model.to(device)
     model.eval() # Mode évaluation
 
