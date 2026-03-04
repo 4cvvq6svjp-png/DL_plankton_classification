@@ -1,0 +1,51 @@
+Logdir : logs/ResNetDropout_1
+## Command 
+/usr/users/sdim/sdim_2/pytorch_lab/src/torchtmpl/main.py config-sample.yaml train
+
+ Config : {'data': {'trainpath': '/mounts/datasets/datasets/2025-ZooCamChallenge/train', 'testpath': '/mounts/datasets/datasets/2025-ZooCamChallenge/test', 'batch_size': 64, 'num_workers': 4, 'valid_ratio': 0.2}, 'optim': {'algo': 'Adam', 'params': {'lr': 0.0001}}, 'nepochs': 20, 'loss': 'CrossEntropyLoss', 'logging': {'logdir': './logs'}, 'model': {'class': 'ResNetDropout', 'num_layers': 4}, 'test': {'checkpoint': './logs/ResNetDropout_0/best_model.pt'}, 'output': {'submission_path': './submission.csv'}} 
+
+## Summary of the model architecture
+===============================================================================================
+Layer (type:depth-idx)                        Output Shape              Param #
+===============================================================================================
+ResNetDropout                                 [64, 86]                  --
+├─ResNet: 1-1                                 [64, 86]                  --
+│    └─Conv2d: 2-1                            [64, 64, 64, 64]          9,408
+│    └─BatchNorm2d: 2-2                       [64, 64, 64, 64]          128
+│    └─ReLU: 2-3                              [64, 64, 64, 64]          --
+│    └─MaxPool2d: 2-4                         [64, 64, 32, 32]          --
+│    └─Sequential: 2-5                        [64, 64, 32, 32]          --
+│    │    └─BasicBlock: 3-1                   [64, 64, 32, 32]          73,984
+│    │    └─BasicBlock: 3-2                   [64, 64, 32, 32]          73,984
+│    └─Sequential: 2-6                        [64, 128, 16, 16]         --
+│    │    └─BasicBlock: 3-3                   [64, 128, 16, 16]         230,144
+│    │    └─BasicBlock: 3-4                   [64, 128, 16, 16]         295,424
+│    └─Sequential: 2-7                        [64, 256, 8, 8]           --
+│    │    └─BasicBlock: 3-5                   [64, 256, 8, 8]           919,040
+│    │    └─BasicBlock: 3-6                   [64, 256, 8, 8]           1,180,672
+│    └─Sequential: 2-8                        [64, 512, 4, 4]           --
+│    │    └─BasicBlock: 3-7                   [64, 512, 4, 4]           3,673,088
+│    │    └─BasicBlock: 3-8                   [64, 512, 4, 4]           4,720,640
+│    └─AdaptiveAvgPool2d: 2-9                 [64, 512, 1, 1]           --
+│    └─Sequential: 2-10                       [64, 86]                  --
+│    │    └─Dropout: 3-9                      [64, 512]                 --
+│    │    └─Linear: 3-10                      [64, 86]                  44,118
+===============================================================================================
+Total params: 11,220,630
+Trainable params: 11,220,630
+Non-trainable params: 0
+Total mult-adds (G): 37.90
+===============================================================================================
+Input size (MB): 12.58
+Forward/backward pass size (MB): 830.52
+Params size (MB): 44.88
+Estimated Total Size (MB): 887.98
+===============================================================================================
+
+## Loss
+
+CrossEntropyLoss()
+
+## Datasets : 
+Train : <torchtmpl.data.WrappedDataset object at 0x7febad18cdc0>
+Validation : <torchtmpl.data.WrappedDataset object at 0x7febad18d1b0>

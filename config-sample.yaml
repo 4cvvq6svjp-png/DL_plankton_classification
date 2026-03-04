@@ -21,11 +21,11 @@ logging:
 #model:
   #class: VanillaCNN
 model:
-  class: VanillaCNN
+  class: ResNetDropout
   num_layers : 4
 
 test :
-  checkpoint : "./logs/VanillaCNN_0/best_model.pt"
+  checkpoint : "./logs/ResNetDropout_0/best_model.pt"
 
 output :
   submission_path : "./submission.csv"

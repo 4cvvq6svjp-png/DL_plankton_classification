@@ -1,0 +1,21 @@
+data:
+  batch_size: 64
+  num_workers: 4
+  testpath: /mounts/datasets/datasets/2025-ZooCamChallenge/test
+  trainpath: /mounts/datasets/datasets/2025-ZooCamChallenge/train
+  valid_ratio: 0.2
+logging:
+  logdir: ./logs
+loss: CrossEntropyLoss
+model:
+  class: ResNetDropout
+  num_layers: 4
+nepochs: 20
+optim:
+  algo: Adam
+  params:
+    lr: 0.0001
+output:
+  submission_path: ./submission.csv
+test:
+  checkpoint: ./logs/ResNetDropout_0/best_model.pt
