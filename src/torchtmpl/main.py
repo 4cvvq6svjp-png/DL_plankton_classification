@@ -137,9 +137,9 @@ def train(config):
     )
     optim_config = config.get("optim", {})
 
-    # ══════════════════════════════════════════
-    #  PHASE 1 : WARM-UP (head only) — skip if resuming
-    # ══════════════════════════════════════════
+    # ════════════════════
+    #  PHASE 1 : WARM-UP
+    # ════════════════════
     warmup_epochs = 0 if resumed else config.get("warmup_epochs", 0)
     global_epoch = 0
 
@@ -190,9 +190,9 @@ def train(config):
         for param in model.parameters():
             param.requires_grad = True
 
-    # ══════════════════════════════════════════
-    #  PHASE 2 : FINE-TUNING (or full training)
-    # ══════════════════════════════════════════
+    # ═══════════════════════
+    #  PHASE 2 : FINE-TUNING 
+    # ════════════════════════
     finetune_epochs = config["nepochs"] - warmup_epochs
 
     # ── Optimizer ─────────────────────────────
