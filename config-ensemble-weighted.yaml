@@ -11,9 +11,7 @@ models:
     checkpoint: logs/gauthier_best_070/best_model__9_.pt
     f1_score: 0.70
 
-  - config: logs/gauthier_best_068/config.yaml
-    checkpoint: logs/gauthier_best_068/best_model__6_.pt
-    f1_score: 0.68
+
 
   - config: logs/convnext_best_062/config.yaml
     checkpoint: logs/convnext_best_062/best_model.pt
