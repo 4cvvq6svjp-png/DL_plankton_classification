@@ -28,7 +28,9 @@ optim:
   backbone_lr: 3.0e-5
   finetune_head_lr: 3.0e-4
   weight_decay: 0.05
-  scheduler: CosineAnnealing
+  scheduler: ReduceLROnPlateau
+  scheduler_patience: 5
+  scheduler_factor: 0.5
   eta_min: 1.0e-6
 
 nepochs: 40
