@@ -59,7 +59,14 @@ def build_optimizer(config, model, has_backbone: bool):
         finetune_head_lr = float(optim_config.get("finetune_head_lr", 1e-4))
         weight_decay = float(optim_config.get("weight_decay", 0.05))
 
-        backbone_params = list(model.model.base_model.parameters())
+        # HfModel : base_model = backbone
+        if hasattr(model.model, "base_model"):
+            backbone_params = list(model.model.base_model.parameters())
+        # TorchVisionResNet : tout sauf fc = backbone
+        elif hasattr(model.model, "fc"):
+            backbone_params = [p for n, p in model.model.named_parameters() if "fc" not in n]
+        else:
+            backbone_params = list(model.model.parameters())
         backbone_ids = {id(p) for p in backbone_params}
         head_params = [p for p in model.parameters() if id(p) not in backbone_ids]
 

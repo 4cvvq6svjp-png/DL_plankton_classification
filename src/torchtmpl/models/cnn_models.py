@@ -7,8 +7,7 @@ import operator
 # External imports
 import torch
 import torch.nn as nn
-
-    
+from torchvision import models as tv_models
 
 import torch.nn as nn
 from transformers import AutoModelForImageClassification
@@ -40,6 +39,28 @@ class HfModel(nn.Module):
         # Hugging Face attend un argument nommé 'pixel_values' pour les images
         outputs = self.model(pixel_values=x)
         return outputs.logits
+
+
+class TorchVisionResNet(nn.Module):
+    """
+    ResNet50 torchvision (conv1, layer1-4, fc) pour charger les checkpoints
+    entraînés avec l'API torchvision (p.ex. d'un collègue), dont les clés
+    state_dict sont de la forme model.conv1.weight, model.layer1.*, model.fc.*.
+    """
+
+    def __init__(self, cfg, input_size, num_classes):
+        super().__init__()
+        model_name = (cfg.get("name") or "resnet50").lower()
+        if "resnet50" in model_name or model_name == "resnet50":
+            backbone = tv_models.resnet50(weights=None)
+        else:
+            raise ValueError(f"TorchVisionResNet: seul resnet50 est supporté, reçu name={model_name}")
+        in_features = backbone.fc.in_features
+        backbone.fc = nn.Linear(in_features, num_classes)
+        self.model = backbone
+
+    def forward(self, x):
+        return self.model(x)
 
 
 # coding: utf-8

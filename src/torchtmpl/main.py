@@ -130,8 +130,11 @@ def train(config):
     cutmix_alpha = mix_cfg.get("cutmix_alpha", 0.0)
     mix_prob = mix_cfg.get("prob", 0.5)
 
-    # ── Detect transfer learning model ────────
-    has_backbone = hasattr(model, 'model') and hasattr(model.model, 'base_model')
+    # ── Detect transfer learning model (backbone + head avec LR distincts) ────────
+    has_backbone = (
+        (hasattr(model, "model") and hasattr(model.model, "base_model"))
+        or (hasattr(model, "model") and hasattr(model.model, "fc"))  # TorchVisionResNet
+    )
     optim_config = config.get("optim", {})
 
     # ══════════════════════════════════════════
@@ -144,8 +147,13 @@ def train(config):
         head_lr = float(optim_config.get("head_lr", 1e-3))
         logging.info(f"\n=== PHASE 1 : WARM-UP ({warmup_epochs} epochs, head LR={head_lr}) ===")
 
-        for param in model.model.base_model.parameters():
-            param.requires_grad = False
+        if hasattr(model.model, "base_model"):
+            for param in model.model.base_model.parameters():
+                param.requires_grad = False
+        else:
+            for n, p in model.model.named_parameters():
+                if "fc" not in n:
+                    p.requires_grad = False
 
         optimizer_warmup = torch.optim.AdamW(
             filter(lambda p: p.requires_grad, model.parameters()),
