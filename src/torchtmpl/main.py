@@ -210,23 +210,25 @@ def train(config):
         optimizer = optim.get_optimizer(optim_config, model.parameters())
         logging.info(f"\n=== TRAINING ({finetune_epochs} epochs) ===")
 
-    # Simple CosineAnnealingLR — no restarts for stable convergence
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-        optimizer,
-        T_max=finetune_epochs,
-        eta_min=float(optim_config.get("eta_min", 1e-7)),
+
+    # ── Scheduler ─────────────────────────────
+    scheduler, plateau_scheduler, finetune_warmup, initial_lrs = optim.build_scheduler(
+        config, optimizer, finetune_epochs
     )
 
     for e in range(finetune_epochs):
         epoch_num = warmup_epochs + e
+
+        if finetune_warmup > 0 and e < finetune_warmup:
+            wf = (e + 1) / finetune_warmup
+            for i, pg in enumerate(optimizer.param_groups):
+                pg['lr'] = initial_lrs[i] * wf
 
         train_metrics = utils.train_one_epoch(
             model, train_loader, loss_fn, optimizer, device,
             scaler=scaler, mixup_alpha=mixup_alpha,
             cutmix_alpha=cutmix_alpha, mix_prob=mix_prob,
         )
-
-        scheduler.step()
 
         if has_backbone:
             current_lr_bb = optimizer.param_groups[0]["lr"]
@@ -237,6 +239,12 @@ def train(config):
 
         test_metrics = utils.test(model, valid_loader, loss_fn, device)
         updated = model_checkpoint.update(test_metrics['f1'])
+
+        if e >= finetune_warmup:
+            if plateau_scheduler:
+                scheduler.step(test_metrics['f1'])
+            else:
+                scheduler.step()
 
         if has_backbone:
             logging.info(

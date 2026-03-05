@@ -1,7 +1,6 @@
 # ══════════════════════════════════════════════════════════
 #  ConvNeXt-Tiny – RESUME from best checkpoint (F1=0.60)
-#  Toutes les améliorations: sampler amorti, FocalLoss alpha,
-#  label smoothing, Mixup/CutMix, CosineAnnealingLR simple
+#  ReduceLROnPlateau + LR rehaussés + warmup fine-tuning
 # ══════════════════════════════════════════════════════════
 
 data:
@@ -28,13 +27,17 @@ loss:
   use_class_weights: true
 
 optim:
-  backbone_lr: 1.0e-5
-  finetune_head_lr: 1.0e-4
+  backbone_lr: 3.0e-5
+  finetune_head_lr: 3.0e-4
   weight_decay: 0.05
-  eta_min: 1.0e-7
+  scheduler: ReduceLROnPlateau
+  scheduler_patience: 5
+  scheduler_factor: 0.5
+  eta_min: 1.0e-6
 
 nepochs: 40
 warmup_epochs: 0
+finetune_warmup: 3
 use_amp: true
 
 mix:

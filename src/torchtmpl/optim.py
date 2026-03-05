@@ -41,3 +41,42 @@ def get_optimizer(cfg, params):
     params_dict = cfg["params"]
     exec(f"global optim; optim = torch.optim.{cfg['algo']}(params, **params_dict)")
     return optim
+
+
+def build_scheduler(config, optimizer, finetune_epochs):
+    """
+    Fabrique de scheduler de LR pour la phase de fine-tuning.
+
+    - supporte CosineAnnealingLR (par défaut, compatible configs historiques)
+    - supporte ReduceLROnPlateau (scheduler: ReduceLROnPlateau)
+    - gère finetune_warmup (nombre d'epochs de warmup linéaire)
+
+    Retourne :
+      - scheduler          : instance du scheduler
+      - plateau_scheduler  : bool, True si ReduceLROnPlateau
+      - finetune_warmup    : int, nb d'epochs de warmup pour le fine-tuning
+      - initial_lrs        : liste des LR initiaux par param_group
+    """
+    optim_config = config.get("optim", {})
+
+    scheduler_name = optim_config.get("scheduler", "CosineAnnealing")
+    plateau_scheduler = scheduler_name == "ReduceLROnPlateau"
+    finetune_warmup = config.get("finetune_warmup", 0)
+    initial_lrs = [pg["lr"] for pg in optimizer.param_groups]
+
+    if plateau_scheduler:
+        scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+            optimizer,
+            mode="max",
+            factor=float(optim_config.get("scheduler_factor", 0.5)),
+            patience=int(optim_config.get("scheduler_patience", 5)),
+            min_lr=float(optim_config.get("eta_min", 1e-6)),
+        )
+    else:
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer,
+            T_max=max(1, finetune_epochs - finetune_warmup),
+            eta_min=float(optim_config.get("eta_min", 1e-7)),
+        )
+
+    return scheduler, plateau_scheduler, finetune_warmup, initial_lrs
