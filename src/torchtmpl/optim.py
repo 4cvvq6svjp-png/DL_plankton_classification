@@ -43,6 +43,48 @@ def get_optimizer(cfg, params):
     return optim
 
 
+def build_optimizer(config, model, has_backbone: bool):
+    """
+    Fabrique d'optimiseur unifiée.
+
+    - Si has_backbone=True : crée un AdamW avec deux groupes de paramètres
+      (backbone vs tête de classification) avec des LR distincts.
+    - Sinon : utilise soit la config générique (algo + lr/weight_decay),
+      soit le schéma historique basé sur get_optimizer(cfg, params).
+    """
+    optim_config = config.get("optim", {})
+
+    if has_backbone:
+        backbone_lr = float(optim_config.get("backbone_lr", 1e-5))
+        finetune_head_lr = float(optim_config.get("finetune_head_lr", 1e-4))
+        weight_decay = float(optim_config.get("weight_decay", 0.05))
+
+        backbone_params = list(model.model.base_model.parameters())
+        backbone_ids = {id(p) for p in backbone_params}
+        head_params = [p for p in model.parameters() if id(p) not in backbone_ids]
+
+        optimizer = torch.optim.AdamW(
+            [
+                {"params": backbone_params, "lr": backbone_lr},
+                {"params": head_params, "lr": finetune_head_lr},
+            ],
+            weight_decay=weight_decay,
+        )
+        return optimizer
+
+    # Cas sans backbone explicite : on essaie d'abord le schéma historique
+    # avec un dict "params", sinon on retombe sur un schéma simple.
+    if "params" in optim_config:
+        return get_optimizer(optim_config, model.parameters())
+
+    algo = optim_config.get("algo", "AdamW")
+    lr = float(optim_config.get("lr", optim_config.get("head_lr", 1e-3)))
+    weight_decay = float(optim_config.get("weight_decay", 0.0))
+
+    OptimClass = getattr(torch.optim, algo)
+    return OptimClass(model.parameters(), lr=lr, weight_decay=weight_decay)
+
+
 def build_scheduler(config, optimizer, finetune_epochs):
     """
     Fabrique de scheduler de LR pour la phase de fine-tuning.

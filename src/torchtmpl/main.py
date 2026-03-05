@@ -187,19 +187,12 @@ def train(config):
     # ══════════════════════════════════════════
     finetune_epochs = config["nepochs"] - warmup_epochs
 
+    optimizer = optim.build_optimizer(config, model, has_backbone)
+
     if has_backbone:
         backbone_lr = float(optim_config.get("backbone_lr", 1e-5))
         finetune_head_lr = float(optim_config.get("finetune_head_lr", 1e-4))
         weight_decay = float(optim_config.get("weight_decay", 0.05))
-
-        backbone_params = list(model.model.base_model.parameters())
-        backbone_ids = {id(p) for p in backbone_params}
-        head_params = [p for p in model.parameters() if id(p) not in backbone_ids]
-
-        optimizer = torch.optim.AdamW([
-            {"params": backbone_params, "lr": backbone_lr},
-            {"params": head_params, "lr": finetune_head_lr},
-        ], weight_decay=weight_decay)
 
         logging.info(
             f"\n=== PHASE 2 : FINE-TUNING ({finetune_epochs} epochs, "
@@ -207,7 +200,6 @@ def train(config):
             f"weight_decay={weight_decay}) ==="
         )
     else:
-        optimizer = optim.get_optimizer(optim_config, model.parameters())
         logging.info(f"\n=== TRAINING ({finetune_epochs} epochs) ===")
 
 
