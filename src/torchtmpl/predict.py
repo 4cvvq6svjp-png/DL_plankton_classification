@@ -7,7 +7,6 @@ import torch
 import pandas as pd
 from torchvision.transforms import v2
 
-# Local imports
 from . import data
 from . import models
 from . import transforms as custom_transforms
@@ -17,14 +16,11 @@ def generate_submission(config, checkpoint_path):
     device = torch.device("cuda") if use_cuda else torch.device("cpu")
     logging.info(f"Using device: {device}")
 
-    # 1. Préparation des données
     data_config = config["data"]
     test_dir = os.path.join(data_config["root_dir"], "test", "imgs")
-    
     if not os.path.exists(test_dir):
         raise FileNotFoundError(f"Le dossier test est introuvable : {test_dir}")
 
-    # Même résolution qu'à l'entraînement (lue depuis la config)
     img_size = data_config.get("img_size", 224)
     resize_size = data_config.get("resize_size", 256)
     preprocess_transforms = custom_transforms.get_transforms(
@@ -41,18 +37,13 @@ def generate_submission(config, checkpoint_path):
     
     logging.info(f"Loaded {len(test_dataset)} images for prediction.")
 
-    # 2. Chargement du modèle
-    # Nombre de classes : depuis la config, ou 86 par défaut (doit correspondre à l'entraînement)
     num_classes = config.get("num_classes", 86)
 
     input_size = (3, img_size, img_size)
     model = models.build_model(config["model"], input_size, num_classes)
     
     logging.info(f"Loading weights from {checkpoint_path}")
-    # CHARGEMENT CORRIGÉ :
     checkpoint = torch.load(checkpoint_path, map_location=device)
-    
-    # On vérifie si c'est un dictionnaire de checkpoint ou juste les poids
     if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint:
         state_dict = checkpoint["model_state_dict"]
     else:
@@ -60,26 +51,20 @@ def generate_submission(config, checkpoint_path):
 
     model.load_state_dict(state_dict)
     model.to(device)
-    model.eval() # Mode évaluation
+    model.eval()
 
-    # 3. Boucle de prédiction
     all_filenames = []
     all_predictions = []
     logging.info("Starting inference...")
-    with torch.no_grad(): # Indispensable pour ne pas faire de OutOfMemory !
-        for i, (images, filenames) in enumerate(test_loader):
+    with torch.no_grad():
+        for images, filenames in test_loader:
             images = images.to(device)
             outputs = model(images)
-        
-            
-            # On prend l'indice de la classe ayant la plus forte probabilité (les logits les plus hauts)
             _, predicted_classes = torch.max(outputs, 1)
             
             all_filenames.extend(filenames)
             all_predictions.extend(predicted_classes.cpu().numpy())
-            
 
-    # 4. Sauvegarde du fichier CSV (tri par imgname pour correspondre à l'ordre attendu par Kaggle)
     df = pd.DataFrame({
         "imgname": all_filenames,
         "label": all_predictions

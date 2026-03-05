@@ -1,42 +1,28 @@
 # coding: utf-8
 
-# Standard imports
 from functools import reduce
 import operator
 
-# External imports
 import torch
 import torch.nn as nn
 from torchvision import models as tv_models
-
-import torch.nn as nn
 from transformers import AutoModelForImageClassification
 
 class HfModel(nn.Module):
     def __init__(self, cfg, input_size, num_classes):
         super().__init__()
-        
-        # 1. On récupère les infos de ton YAML (cfg correspond déjà à config["model"])
         model_name = cfg.get("name")
         freeze = cfg.get("freeze_backbone", True)
-        
-        # 2. Le cœur de la correction : AutoModelForImageClassification
-        # Il s'adaptera automatiquement à EfficientNet, ResNet, ViT, etc.
         self.model = AutoModelForImageClassification.from_pretrained(
             model_name,
             num_labels=num_classes,
             ignore_mismatched_sizes=True
         )
-        
-        # 3. Le gel des poids (Transfer Learning)
         if freeze:
-            # L'astuce magique : .base_model cible l'extracteur de features
-            # de n'importe quel modèle, peu importe son créateur.
             for param in self.model.base_model.parameters():
                 param.requires_grad = False
-            
+
     def forward(self, x):
-        # Hugging Face attend un argument nommé 'pixel_values' pour les images
         outputs = self.model(pixel_values=x)
         return outputs.logits
 
@@ -64,10 +50,9 @@ class TorchVisionResNet(nn.Module):
 
 
 def _replace_tv_classifier(backbone, num_classes, classifier_attr="classifier"):
-    """Remplace la tête de classification d'un modèle torchvision (EfficientNet, ConvNeXt)."""
+    """Remplace la tête de classification (EfficientNet, ConvNeXt)."""
     head = getattr(backbone, classifier_attr)
     if isinstance(head, nn.Sequential):
-        # ConvNeXt: classifier[2] = Linear ; EfficientNet: classifier[1] = Linear
         for i in range(len(head) - 1, -1, -1):
             if isinstance(head[i], nn.Linear):
                 in_features = head[i].in_features
@@ -132,16 +117,6 @@ class TorchVisionConvNeXt(nn.Module):
         return self.model(x)
 
 
-# coding: utf-8
-
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-
-# ══════════════════════════════════════════════════════════
-#  Building blocks for ModernCNN
-# ══════════════════════════════════════════════════════════
-
 class DropPath(nn.Module):
     """Stochastic depth: randomly drops entire residual branches during training."""
 
@@ -155,7 +130,6 @@ class DropPath(nn.Module):
         keep = 1.0 - self.drop_prob
         shape = (x.shape[0],) + (1,) * (x.ndim - 1)
         mask = torch.rand(shape, device=x.device, dtype=x.dtype).floor_().clamp_(0, 1)
-        # scale surviving activations to preserve expected value
         return x * mask / keep
 
 
@@ -217,10 +191,6 @@ class ResBlock(nn.Module):
         return self.act(out + skip)
 
 
-# ══════════════════════════════════════════════════════════
-#  ModernCNN  –  best from-scratch CNN for this task
-# ══════════════════════════════════════════════════════════
-
 class ModernCNN(nn.Module):
     """
     A ResNet-style CNN built entirely from scratch with modern tricks:
@@ -249,7 +219,6 @@ class ModernCNN(nn.Module):
         dropout = cfg.get("dropout", 0.3)
         se_red = cfg.get("se_reduction", 4)
 
-        # ── Stem: 2 convolutions, reduce spatial by 2 ──
         self.stem = nn.Sequential(
             nn.Conv2d(in_ch, base // 2, 3, stride=2, padding=1, bias=False),
             nn.BatchNorm2d(base // 2),
@@ -259,7 +228,6 @@ class ModernCNN(nn.Module):
             nn.GELU(),
         )
 
-        # ── Stages: each stage doubles channels and halves spatial ──
         total_blocks = sum(depths)
         block_idx = 0
         stages = []
@@ -280,8 +248,6 @@ class ModernCNN(nn.Module):
             stages.append(nn.Sequential(*blocks))
 
         self.stages = nn.Sequential(*stages)
-
-        # ── Head ──
         self.head = nn.Sequential(
             nn.AdaptiveAvgPool2d(1),
             nn.Flatten(),

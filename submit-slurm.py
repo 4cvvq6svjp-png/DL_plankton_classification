@@ -28,24 +28,14 @@ echo "Copying the source directory and data"
 date
 mkdir -p $TMPDIR/code
 
-# MODIFICATION : On a enlevé "--exclude configs" pour que le fichier YAML temporaire passe bien
 rsync -r --exclude logs --exclude logslurms . $TMPDIR/code
 
 echo "Checking out the correct version of the code commit_id {commit_id}"
 cd $TMPDIR/code
 git checkout {commit_id}
 
-# =========================================================
-# LA MAGIE EST ICI : Le tunnel vers ton espace permanent
-# =========================================================
-# 1. On s'assure que le dossier permanent existe chez toi
 mkdir -p $current_dir/logs
-
-# 2. On crée un lien symbolique. 
-# Quand Python écrira dans le dossier local 'logs', 
-# les fichiers iront DIRECTEMENT sur ton disque permanent !
 ln -s $current_dir/logs $TMPDIR/code/logs
-# =========================================================
 
 
 echo "Setting up the virtual environment"
@@ -58,19 +48,12 @@ python -m pip install .
 echo "Training"
 python -m torchtmpl.main {configpath} train
 
-# MODIFICATION : On stocke le code de sortie pour rapatrier les logs MÊME si ça a planté
 TRAIN_EXIT_CODE=$?
 
-# =========================================================
-# NOUVEAU : RAPATRIEMENT DES LOGS ET MODÈLES
-# =========================================================
 echo "Retrieving logs from the compute node..."
 mkdir -p $current_dir/logs
-# On renvoie tout le dossier logs du GPU vers ton dossier d'origine
 rsync -avz logs/ $current_dir/logs/
-# =========================================================
 
-# On quitte avec erreur uniquement après avoir tout sauvegardé
 if [[ $TRAIN_EXIT_CODE != 0 ]]; then
     exit -1
 fi
@@ -83,9 +66,7 @@ def submit_job(job):
     os.system("sbatch job.sbatch")
 
 
-# Ensure all the modified files have been staged and commited
-# This is to guarantee that the commit id is a reliable certificate
-# of the version of the code you want to evaluate
+# Vérifier que tout est commité avant soumission
 result = int(
     subprocess.run(
         "expr $(git diff --name-only | wc -l) + $(git diff --name-only --cached | wc -l)",
@@ -123,9 +104,4 @@ os.system("mkdir -p configs")
 tmp_configfilepath = tempfile.mkstemp(dir="./configs", suffix="-config.yml")[1]
 os.system(f"cp {configpath} {tmp_configfilepath}")
 
-# Launch the batch jobs
 submit_job(makejob(commit_id, tmp_configfilepath, nruns))
-
-
-# python3 -m venv venv
-# source venv

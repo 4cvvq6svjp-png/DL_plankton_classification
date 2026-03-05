@@ -62,10 +62,8 @@ def build_optimizer(config, model, has_backbone: bool):
         # HfModel : base_model = backbone
         if hasattr(model.model, "base_model"):
             backbone_params = list(model.model.base_model.parameters())
-        # TorchVisionResNet : tout sauf fc = backbone
         elif hasattr(model.model, "fc"):
             backbone_params = [p for n, p in model.model.named_parameters() if "fc" not in n]
-        # TorchVisionEfficientNet / TorchVisionConvNeXt : tout sauf classifier = backbone
         elif hasattr(model.model, "classifier"):
             backbone_params = [p for n, p in model.model.named_parameters() if "classifier" not in n]
         else:
@@ -82,8 +80,6 @@ def build_optimizer(config, model, has_backbone: bool):
         )
         return optimizer
 
-    # Cas sans backbone explicite : on essaie d'abord le schéma historique
-    # avec un dict "params", sinon on retombe sur un schéma simple.
     if "params" in optim_config:
         return get_optimizer(optim_config, model.parameters())
 

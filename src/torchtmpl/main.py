@@ -130,11 +130,10 @@ def train(config):
     cutmix_alpha = mix_cfg.get("cutmix_alpha", 0.0)
     mix_prob = mix_cfg.get("prob", 0.5)
 
-    # ── Detect transfer learning model (backbone + head avec LR distincts) ────────
     has_backbone = (
         (hasattr(model, "model") and hasattr(model.model, "base_model"))
-        or (hasattr(model, "model") and hasattr(model.model, "fc"))  # TorchVisionResNet
-        or (hasattr(model, "model") and hasattr(model.model, "classifier"))  # TorchVisionEfficientNet, TorchVisionConvNeXt
+        or (hasattr(model, "model") and hasattr(model.model, "fc"))
+        or (hasattr(model, "model") and hasattr(model.model, "classifier"))
     )
     optim_config = config.get("optim", {})
 

@@ -1,24 +1,22 @@
 # coding: utf-8
 
-# Standard imports
 import logging
-import random
+import os
+import sys
 
-# External imports
 import numpy as np
+import yaml
 import torch
 import torch.nn as nn
-import torchvision.transforms.functional as F
 import torch.utils.data
 import torchvision
-from torchvision import transforms
+import torchvision.transforms.functional as F
 from torchvision.transforms import v2
 from torchvision.utils import make_grid, save_image
-import PIL
-import os
 import matplotlib.pyplot as plt
-from . import transforms as custom_transforms
 from sklearn.model_selection import train_test_split
+
+from . import transforms as custom_transforms
 
 
 def show(imgs):
@@ -37,24 +35,6 @@ def show_image(X):
     plt.figure()
     plt.imshow(X[0] if num_c == 1 else X.permute(1, 2, 0))
     plt.show()
-
-
-class GrayToRGB(torch.nn.Module):
-    def forward(self, img):
-        """
-        Args:
-            img (Tensor): Image to be converted to RGB if necessary
-                          if Tensor, expected to be (C, H, W)
-
-        Returns:
-            PIL Image or Tensor: RGB image
-        """
-        if isinstance(img, torch.Tensor):
-            if img.shape[0] == 1:
-                img = img.repeat(3, 1, 1)
-        else:
-            raise TypeError(f"Expected Tensor, got {type(img)}")
-        return img
 
 
 class WrappedDataset(torch.utils.data.dataset.Dataset):
@@ -84,8 +64,6 @@ def get_dataloaders(data_config, use_cuda):
     aug_type = data_config.get("augmentation", "classic")
     img_size = data_config.get("img_size", 224)
     resize_size = data_config.get("resize_size", 256)
-    # --- LECTURE DE LA CONFIG ---
-    aug_type = data_config.get("augmentation", "classic")
 
     logging.info(f"  - Setup: Augmentation={aug_type} | Stratified Split activé")
 
@@ -95,33 +73,22 @@ def get_dataloaders(data_config, use_cuda):
 
     base_dataset = torchvision.datasets.ImageFolder(root=train_path)
 
-    # --- NOUVEAU DÉCOUPAGE STRATIFIÉ ---
     indices = list(range(len(base_dataset)))
-    targets = base_dataset.targets # On récupère toutes les étiquettes
-
-    # train_test_split s'occupe de mélanger ET de respecter les proportions (stratify)
+    targets = base_dataset.targets
     train_indices, valid_indices = train_test_split(
-        indices, 
-        test_size=valid_ratio, 
-        stratify=targets, 
-        random_state=42 # Fixe l'aléatoire pour rendre tes tests reproductibles
+        indices, test_size=valid_ratio, stratify=targets, random_state=42
     )
 
     train_dataset = torch.utils.data.Subset(base_dataset, train_indices)
     valid_dataset = torch.utils.data.Subset(base_dataset, valid_indices)
 
-    # --- APPLICATION DES TRANSFORMATIONS ---
-    # Changement ici : on passe à 260 pour optimiser les performances de l'EfficientNet-B2
     train_transforms = custom_transforms.get_transforms(split="train", img_size=img_size, resize_size=resize_size)
     valid_transforms = custom_transforms.get_transforms(split="valid", img_size=img_size, resize_size=resize_size)
 
     train_dataset_wrapped = WrappedDataset(train_dataset, train_transforms)
     valid_dataset_wrapped = WrappedDataset(valid_dataset, valid_transforms)
 
-    # --- WeightedRandomSampler avec dampening configurable ---
-    # power=1.0 → distribution uniforme forcée (trop agressif)
-    # power=0.5 → racine carrée (boost doux des classes rares)
-    # power=0.0 → pas de rééquilibrage
+    # sampler_power: 0 = pas de rééquilibrage, 0.5 = boost doux, 1.0 = uniforme
     sampler_power = data_config.get("sampler_power", 0.5)
     train_targets = [base_dataset.targets[i] for i in train_indices]
     class_counts = np.bincount(train_targets)
@@ -156,18 +123,13 @@ def get_dataloaders(data_config, use_cuda):
 
     num_classes = len(base_dataset.classes)
     input_size = tuple(train_dataset_wrapped[0][0].shape)
-    
-    # Calcul des poids de classes pour la CrossEntropyLoss
     class_weights = compute_class_weights(train_indices, base_dataset)
 
     return train_loader, valid_loader, input_size, num_classes, class_weights
 
 
 def compute_class_weights(train_indices, base_dataset):
-    """
-    Compute per-class weights for the loss function (inverse sqrt frequency).
-    Normalized so weights sum to num_classes.
-    """
+    """Poids par classe : 1/sqrt(count), normalisés pour somme = num_classes."""
     train_targets = [base_dataset.targets[i] for i in train_indices]
     class_counts = np.bincount(train_targets)
     class_weights = 1.0 / np.sqrt(class_counts + 1e-6)
@@ -175,12 +137,7 @@ def compute_class_weights(train_indices, base_dataset):
     return torch.tensor(class_weights, dtype=torch.float32)
 
 
-
-import sys
-import yaml
-
 def test_dataloaders(config_path):
-    # On lit le vrai fichier de configuration passé en paramètre
     logging.info(f"Loading config from {config_path}")
     with open(config_path, "r") as f:
         config = yaml.safe_load(f)
@@ -196,8 +153,6 @@ def test_dataloaders(config_path):
 
         X, y = next(iter(train_loader))
         logging.info(f"Batch loaded: X shape {X.shape}, y shape {y.shape}")
-        
-        # Sauvegarde et affichage
         grid = make_grid(X, nrow=8)
         save_image(grid, "batch_preview.png")
         logging.info("Image saved to batch_preview.png")
@@ -214,11 +169,11 @@ def test_dataloaders(config_path):
 
 from PIL import Image
 
+
 class KaggleTestDataset(torch.utils.data.Dataset):
     def __init__(self, root_dir, transform=None):
         self.root_dir = root_dir
         self.transform = transform
-        # Ordre trié pour reproductibilité et alignement avec l'ordre souvent attendu par Kaggle
         self.images = sorted(
             f for f in os.listdir(root_dir) if f.lower().endswith(('.png', '.jpg', '.jpeg'))
         )
@@ -229,14 +184,9 @@ class KaggleTestDataset(torch.utils.data.Dataset):
     def __getitem__(self, idx):
         img_name = self.images[idx]
         img_path = os.path.join(self.root_dir, img_name)
-        
-        # On ouvre l'image en forçant le format RGB pour ResNet
         image = Image.open(img_path).convert("RGB")
-        
         if self.transform:
             image = self.transform(image)
-            
-        # On renvoie le tenseur de l'image ET son nom
         return image, img_name
 
 
@@ -244,8 +194,6 @@ class KaggleTestDataset(torch.utils.data.Dataset):
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
-    
-    # On vérifie qu'on a bien donné le config.yaml dans la commande
     if len(sys.argv) != 2:
         logging.error(f"Usage: python {sys.argv[0]} <config.yaml>")
         sys.exit(-1)

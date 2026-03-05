@@ -1,9 +1,5 @@
 # coding: utf-8
 
-# External imports
-import torch
-
-# Local imports
 from .base_models import *
 from .cnn_models import *
 

@@ -66,10 +66,7 @@ def generate_ensemble_submission(model_specs, output_filename="submission_ensemb
     if not model_specs:
         raise ValueError("Aucun modèle fourni pour l'ensemble.")
 
-    # Tous les loaders doivent utiliser le même batch_size pour que les batches soient alignés
     common_batch_size = model_specs[0]["config"]["data"].get("batch_size", 32)
-
-    # 1. Pour chaque modèle : DataLoader + modèle
     loaders = []
     models_list = []
 
@@ -96,24 +93,17 @@ def generate_ensemble_submission(model_specs, output_filename="submission_ensemb
         model.eval()
         models_list.append(model)
 
-    # Vérification très simple : même nombre de batches et même ordre de fichiers
-    # grâce à KaggleTestDataset (tri des noms et shuffle=False).
     all_filenames = []
     all_predictions = []
     logging.info("Starting heterogeneous ensemble inference...")
 
     with torch.no_grad():
-        # zip sur les loaders : à chaque itération, on récupère un batch par modèle
         for batches in zip(*loaders):
-            # batches[i] = (images_i, filenames_i) pour le modèle i
             images_0, filenames_0 = batches[0]
             images_0 = images_0.to(device)
-
-            # On accumule les probabilités dans l'espace du premier modèle
             probs_sum = None
 
             for (model, (images_i, filenames_i)) in zip(models_list, batches):
-                # par sécurité, on vérifie que les noms d'images sont alignés
                 if filenames_i != filenames_0:
                     raise RuntimeError("Désalignement des batchs entre les DataLoaders d'ensemble.")
 
@@ -131,7 +121,6 @@ def generate_ensemble_submission(model_specs, output_filename="submission_ensemb
             all_filenames.extend(filenames_0)
             all_predictions.extend(predicted_classes.cpu().numpy())
 
-    # 2. Sauvegarde CSV
     df = pd.DataFrame({"imgname": all_filenames, "label": all_predictions})
     df = df.sort_values("imgname").reset_index(drop=True)
 
@@ -141,8 +130,6 @@ def generate_ensemble_submission(model_specs, output_filename="submission_ensemb
 
 if __name__ == "__main__":
     logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(message)s")
-
-    # On attend des paires (config, checkpoint) : cfg1 ckpt1 cfg2 ckpt2 ...
     if (len(sys.argv) - 1) < 2 or (len(sys.argv) - 1) % 2 != 0:
         logging.error(
             "Usage : python -m torchtmpl.predict_ensemble "

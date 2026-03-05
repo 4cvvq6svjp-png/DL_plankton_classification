@@ -44,10 +44,6 @@ class ModelCheckpoint(object):
         return False
 
 
-# ──────────────────────────────────────────────
-#  Mixup / CutMix helpers
-# ──────────────────────────────────────────────
-
 def mixup_data(x, y, alpha=0.2):
     lam = np.random.beta(alpha, alpha)
     index = torch.randperm(x.size(0), device=x.device)
@@ -74,10 +70,6 @@ def cutmix_data(x, y, alpha=1.0):
     lam = 1.0 - (y2 - y1) * (x2 - x1) / (H * W)
     return mixed_x, y, y[index], lam
 
-
-# ──────────────────────────────────────────────
-#  Training loop (one epoch)
-# ──────────────────────────────────────────────
 
 def train_one_epoch(model, loader, f_loss, optimizer, device,
                     scaler=None, mixup_alpha=0.0, cutmix_alpha=0.0, mix_prob=0.5):
