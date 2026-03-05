@@ -133,18 +133,26 @@ def get_dataloaders(data_config, use_cuda):
         replacement=True,
     )
 
+    dl_kw = dict(
+        batch_size=batch_size,
+        num_workers=num_workers,
+        pin_memory=use_cuda,
+    )
+    if num_workers > 0:
+        dl_kw["persistent_workers"] = True
+        dl_kw["prefetch_factor"] = max(2, data_config.get("prefetch_factor", 2))
+
     train_loader = torch.utils.data.DataLoader(
         train_dataset_wrapped,
-        batch_size=batch_size,
         sampler=sampler,
-        num_workers=num_workers,
+        **dl_kw,
     )
 
     valid_loader = torch.utils.data.DataLoader(
         valid_dataset_wrapped,
         batch_size=batch_size,
         shuffle=False,
-        num_workers=num_workers,
+        **dl_kw,
     )
 
     num_classes = len(base_dataset.classes)

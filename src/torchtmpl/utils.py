@@ -89,8 +89,10 @@ def train_one_epoch(model, loader, f_loss, optimizer, device,
     all_targets = []
     use_mix = (mixup_alpha > 0 or cutmix_alpha > 0)
 
+    non_blocking = device.type == "cuda"
     for inputs, targets in (pbar := tqdm.tqdm(loader, desc="Train")):
-        inputs, targets = inputs.to(device), targets.to(device)
+        inputs = inputs.to(device, non_blocking=non_blocking)
+        targets = targets.to(device, non_blocking=non_blocking)
 
         targets_a, targets_b, lam = targets, targets, 1.0
         if use_mix and np.random.rand() < mix_prob:
@@ -144,9 +146,11 @@ def test(model, loader, f_loss, device):
     all_preds = []
     all_targets = []
 
+    non_blocking = device.type == "cuda"
     with torch.no_grad():
         for inputs, targets in loader:
-            inputs, targets = inputs.to(device), targets.to(device)
+            inputs = inputs.to(device, non_blocking=non_blocking)
+            targets = targets.to(device, non_blocking=non_blocking)
             outputs = model(inputs)
             loss = f_loss(outputs, targets)
 
