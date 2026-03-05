@@ -65,6 +65,9 @@ def build_optimizer(config, model, has_backbone: bool):
         # TorchVisionResNet : tout sauf fc = backbone
         elif hasattr(model.model, "fc"):
             backbone_params = [p for n, p in model.model.named_parameters() if "fc" not in n]
+        # TorchVisionEfficientNet / TorchVisionConvNeXt : tout sauf classifier = backbone
+        elif hasattr(model.model, "classifier"):
+            backbone_params = [p for n, p in model.model.named_parameters() if "classifier" not in n]
         else:
             backbone_params = list(model.model.parameters())
         backbone_ids = {id(p) for p in backbone_params}

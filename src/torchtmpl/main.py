@@ -134,6 +134,7 @@ def train(config):
     has_backbone = (
         (hasattr(model, "model") and hasattr(model.model, "base_model"))
         or (hasattr(model, "model") and hasattr(model.model, "fc"))  # TorchVisionResNet
+        or (hasattr(model, "model") and hasattr(model.model, "classifier"))  # TorchVisionEfficientNet, TorchVisionConvNeXt
     )
     optim_config = config.get("optim", {})
 
@@ -152,7 +153,7 @@ def train(config):
                 param.requires_grad = False
         else:
             for n, p in model.model.named_parameters():
-                if "fc" not in n:
+                if "fc" not in n and "classifier" not in n:
                     p.requires_grad = False
 
         optimizer_warmup = torch.optim.AdamW(

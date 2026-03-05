@@ -63,6 +63,75 @@ class TorchVisionResNet(nn.Module):
         return self.model(x)
 
 
+def _replace_tv_classifier(backbone, num_classes, classifier_attr="classifier"):
+    """Remplace la tête de classification d'un modèle torchvision (EfficientNet, ConvNeXt)."""
+    head = getattr(backbone, classifier_attr)
+    if isinstance(head, nn.Sequential):
+        # ConvNeXt: classifier[2] = Linear ; EfficientNet: classifier[1] = Linear
+        for i in range(len(head) - 1, -1, -1):
+            if isinstance(head[i], nn.Linear):
+                in_features = head[i].in_features
+                new_head = list(head)
+                new_head[i] = nn.Linear(in_features, num_classes)
+                setattr(backbone, classifier_attr, nn.Sequential(*new_head))
+                return
+    raise ValueError(f"Impossible de trouver un Linear dans {classifier_attr}")
+
+
+class TorchVisionEfficientNet(nn.Module):
+    """
+    EfficientNet torchvision (B0–B7) pour entraînement / prédiction.
+    state_dict : model.features.*, model.avgpool, model.classifier.*
+    """
+
+    def __init__(self, cfg, input_size, num_classes):
+        super().__init__()
+        name = (cfg.get("name") or "efficientnet_b0").lower()
+        builders = {
+            "efficientnet_b0": tv_models.efficientnet_b0,
+            "efficientnet_b1": tv_models.efficientnet_b1,
+            "efficientnet_b2": tv_models.efficientnet_b2,
+            "efficientnet_b3": tv_models.efficientnet_b3,
+            "efficientnet_b4": tv_models.efficientnet_b4,
+            "efficientnet_b5": tv_models.efficientnet_b5,
+            "efficientnet_b6": tv_models.efficientnet_b6,
+            "efficientnet_b7": tv_models.efficientnet_b7,
+        }
+        if name not in builders:
+            raise ValueError(f"TorchVisionEfficientNet: name doit être dans {list(builders.keys())}, reçu {name}")
+        backbone = builders[name](weights=None)
+        _replace_tv_classifier(backbone, num_classes, "classifier")
+        self.model = backbone
+
+    def forward(self, x):
+        return self.model(x)
+
+
+class TorchVisionConvNeXt(nn.Module):
+    """
+    ConvNeXt torchvision (Tiny, Small, Base, Large) pour entraînement / prédiction.
+    state_dict : model.features.*, model.avgpool, model.classifier.*
+    """
+
+    def __init__(self, cfg, input_size, num_classes):
+        super().__init__()
+        name = (cfg.get("name") or "convnext_tiny").lower()
+        builders = {
+            "convnext_tiny": tv_models.convnext_tiny,
+            "convnext_small": tv_models.convnext_small,
+            "convnext_base": tv_models.convnext_base,
+            "convnext_large": tv_models.convnext_large,
+        }
+        if name not in builders:
+            raise ValueError(f"TorchVisionConvNeXt: name doit être dans {list(builders.keys())}, reçu {name}")
+        backbone = builders[name](weights=None)
+        _replace_tv_classifier(backbone, num_classes, "classifier")
+        self.model = backbone
+
+    def forward(self, x):
+        return self.model(x)
+
+
 # coding: utf-8
 
 import torch
