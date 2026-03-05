@@ -13,8 +13,8 @@ data:
   sampler_power: 0.5
 
 model:
-  class: HfModel
-  name: microsoft/resnet-50
+  class: TorchVisionResNet
+  name: resnet50
   freeze_backbone: false
 
 resume:
