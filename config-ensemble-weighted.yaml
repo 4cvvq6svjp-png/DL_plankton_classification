@@ -23,7 +23,4 @@ models:
     checkpoint: logs/effnet_best_060/best_model.pt
     f1_score: 0.60
 
-  - config: logs/resnet_best_054/config.yaml
-    checkpoint: logs/resnet_best_054/best_model.pt
-    f1_score: 0.54
 
