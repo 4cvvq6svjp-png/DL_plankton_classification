@@ -150,7 +150,6 @@ def get_dataloaders(data_config, use_cuda):
 
     valid_loader = torch.utils.data.DataLoader(
         valid_dataset_wrapped,
-        batch_size=batch_size,
         shuffle=False,
         **dl_kw,
     )
