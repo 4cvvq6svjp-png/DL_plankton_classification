@@ -187,6 +187,7 @@ def train(config):
     # ══════════════════════════════════════════
     finetune_epochs = config["nepochs"] - warmup_epochs
 
+    # ── Optimizer ─────────────────────────────
     optimizer = optim.build_optimizer(config, model, has_backbone)
 
     if has_backbone:
