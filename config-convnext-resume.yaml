@@ -18,7 +18,7 @@ model:
   freeze_backbone: false
 
 resume:
-  checkpoint: './logs/HfModel_20260302_133002_0/best_model.pt'
+  checkpoint: './logs/convnext_best_062/best_model.pt'
 
 loss:
   class: FocalLoss
