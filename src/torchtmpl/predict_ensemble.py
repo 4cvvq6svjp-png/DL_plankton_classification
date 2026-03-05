@@ -14,8 +14,11 @@ from . import models
 from . import transforms as custom_transforms
 
 
-def _build_test_loader_from_config(config, device):
-    """Construit un DataLoader test à partir d'une config YAML."""
+def _build_test_loader_from_config(config, device, batch_size_override=None):
+    """Construit un DataLoader test à partir d'une config YAML.
+    Si batch_size_override est donné, il est utilisé à la place de data.batch_size
+    (nécessaire en ensemble pour que tous les loaders aient les mêmes batches).
+    """
     data_config = config["data"]
     test_dir = os.path.join(data_config["root_dir"], "test", "imgs")
 
@@ -28,10 +31,11 @@ def _build_test_loader_from_config(config, device):
         split="test", img_size=img_size, resize_size=resize_size
     )
 
+    batch_size = batch_size_override if batch_size_override is not None else data_config["batch_size"]
     test_dataset = data.KaggleTestDataset(test_dir, transform=preprocess_transforms)
     test_loader = torch.utils.data.DataLoader(
         test_dataset,
-        batch_size=data_config["batch_size"],
+        batch_size=batch_size,
         shuffle=False,
         num_workers=data_config["num_workers"],
     )
@@ -62,6 +66,9 @@ def generate_ensemble_submission(model_specs, output_filename="submission_ensemb
     if not model_specs:
         raise ValueError("Aucun modèle fourni pour l'ensemble.")
 
+    # Tous les loaders doivent utiliser le même batch_size pour que les batches soient alignés
+    common_batch_size = model_specs[0]["config"]["data"].get("batch_size", 32)
+
     # 1. Pour chaque modèle : DataLoader + modèle
     loaders = []
     models_list = []
@@ -70,7 +77,9 @@ def generate_ensemble_submission(model_specs, output_filename="submission_ensemb
         cfg = spec["config"]
         ckpt_path = spec["ckpt"]
 
-        test_loader, num_classes, input_size = _build_test_loader_from_config(cfg, device)
+        test_loader, num_classes, input_size = _build_test_loader_from_config(
+            cfg, device, batch_size_override=common_batch_size
+        )
         loaders.append(test_loader)
 
         logging.info(f"Loading model '{cfg['model']['name']}' from {ckpt_path}")
