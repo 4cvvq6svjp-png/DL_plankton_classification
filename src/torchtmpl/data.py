@@ -88,7 +88,7 @@ def get_dataloaders(data_config, use_cuda):
     train_dataset_wrapped = WrappedDataset(train_dataset, train_transforms)
     valid_dataset_wrapped = WrappedDataset(valid_dataset, valid_transforms)
 
-    # sampler_power: 0 = pas de rééquilibrage, 0.5 = boost doux, 1.0 = uniforme
+    # 0.5 = boost doux, 1.0 = uniforme
     sampler_power = data_config.get("sampler_power", 0.5)
     train_targets = [base_dataset.targets[i] for i in train_indices]
     class_counts = np.bincount(train_targets)
