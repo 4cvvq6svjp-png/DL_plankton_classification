@@ -1,14 +1,36 @@
 # coding: utf-8
 
-from functools import reduce
-import operator
-
 import torch
 import torch.nn as nn
 from torchvision import models as tv_models
 from transformers import AutoModelForImageClassification
 
+
+# -----------------------------------------------------------------------------
+# Helpers (TorchVision)
+# -----------------------------------------------------------------------------
+
+def _replace_tv_classifier(backbone, num_classes, classifier_attr="classifier"):
+    """Remplace la tête de classification (EfficientNet, ConvNeXt)."""
+    head = getattr(backbone, classifier_attr)
+    if isinstance(head, nn.Sequential):
+        for i in range(len(head) - 1, -1, -1):
+            if isinstance(head[i], nn.Linear):
+                in_features = head[i].in_features
+                new_head = list(head)
+                new_head[i] = nn.Linear(in_features, num_classes)
+                setattr(backbone, classifier_attr, nn.Sequential(*new_head))
+                return
+    raise ValueError(f"Impossible de trouver un Linear dans {classifier_attr}")
+
+
+# -----------------------------------------------------------------------------
+# Modèles TorchVision / HuggingFace
+# -----------------------------------------------------------------------------
+
 class HfModel(nn.Module):
+    """Modèle Hugging Face (AutoModelForImageClassification) avec option freeze backbone."""
+
     def __init__(self, cfg, input_size, num_classes):
         super().__init__()
         model_name = cfg.get("name")
@@ -47,20 +69,6 @@ class TorchVisionResNet(nn.Module):
 
     def forward(self, x):
         return self.model(x)
-
-
-def _replace_tv_classifier(backbone, num_classes, classifier_attr="classifier"):
-    """Remplace la tête de classification (EfficientNet, ConvNeXt)."""
-    head = getattr(backbone, classifier_attr)
-    if isinstance(head, nn.Sequential):
-        for i in range(len(head) - 1, -1, -1):
-            if isinstance(head[i], nn.Linear):
-                in_features = head[i].in_features
-                new_head = list(head)
-                new_head[i] = nn.Linear(in_features, num_classes)
-                setattr(backbone, classifier_attr, nn.Sequential(*new_head))
-                return
-    raise ValueError(f"Impossible de trouver un Linear dans {classifier_attr}")
 
 
 class TorchVisionEfficientNet(nn.Module):
@@ -116,6 +124,10 @@ class TorchVisionConvNeXt(nn.Module):
     def forward(self, x):
         return self.model(x)
 
+
+# -----------------------------------------------------------------------------
+# Blocs pour ModernCNN (from scratch)
+# -----------------------------------------------------------------------------
 
 class DropPath(nn.Module):
     """Stochastic depth: randomly drops entire residual branches during training."""
@@ -190,6 +202,10 @@ class ResBlock(nn.Module):
 
         return self.act(out + skip)
 
+
+# -----------------------------------------------------------------------------
+# ModernCNN (architecture from scratch)
+# -----------------------------------------------------------------------------
 
 class ModernCNN(nn.Module):
     """
