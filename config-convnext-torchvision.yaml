@@ -35,7 +35,7 @@ optim:
 
 nepochs: 40
 warmup_epochs: 0
-finetune_warmup: 3
+finetune_warmup: 0
 use_amp: true
 
 mix:
