@@ -12,7 +12,6 @@ models:
     f1_score: 0.70
 
 
-
   - config: logs/convnext_best_062/config.yaml
     checkpoint: logs/convnext_best_062/best_model.pt
     f1_score: 0.62
