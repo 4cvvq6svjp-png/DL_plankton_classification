@@ -1,7 +1,61 @@
 # coding: utf-8
 
+# Standard imports
+from functools import reduce
+import operator
+
+# External imports
 import torch
 import torch.nn as nn
+
+
+def conv_relu_bn(cin, cout):
+    return [
+        nn.Conv2d(cin, cout, kernel_size=3, stride=1, padding=1),
+        nn.ReLU(),
+        nn.BatchNorm2d(cout),
+    ]
+
+
+def conv_down(cin, cout):
+    return [
+        nn.Conv2d(cin, cout, kernel_size=2, stride=2, padding=0),
+        nn.ReLU(),
+        nn.BatchNorm2d(cout),
+    ]
+
+
+class VanillaCNN(nn.Module):
+    """
+    A fancy CNN model with :
+        - stacked 3x3 convolutions
+        - convolutive down sampling
+        - a global average pooling at the end
+    """
+    def __init__(self, cfg, input_size, num_classes):
+        super().__init__()
+        
+        layers = []
+        cin = input_size[0]
+        cout = 16
+        for i in range(cfg["num_layers"]):
+            layers.extend(conv_relu_bn(cin, cout))
+            layers.extend(conv_relu_bn(cout, cout))
+            layers.extend(conv_down(cout, 2 * cout))
+            cin = 2 * cout
+            cout = 2 * cout
+            
+        layers.append(nn.AdaptiveAvgPool2d(1))
+        layers.append(nn.Flatten(start_dim=1))
+        layers.append(nn.Linear(cout, num_classes))
+        
+        self.model = nn.Sequential(*layers)
+        
+    def forward(self, x):
+        return self.model(x)
+
+
+
 from torchvision import models as tv_models
 from transformers import AutoModelForImageClassification
 
