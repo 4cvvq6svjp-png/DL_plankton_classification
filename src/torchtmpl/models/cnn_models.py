@@ -343,3 +343,30 @@ class ModernCNN(nn.Module):
         x = self.stem(x)
         x = self.stages(x)
         return self.head(x)
+
+
+
+class PretrainedResNet50(nn.Module):
+    
+    def __init__(self, cfg, input_size, num_classes=86):
+        super(PretrainedResNet50, self).__init__()
+        
+        freeze_features = cfg.get("freeze_features", False)
+        
+        # 1. Charger le modèle
+        weights = models.ResNet50_Weights.DEFAULT
+        self.model = models.resnet50(weights=weights)
+        
+        # 2. Geler les couches
+        if freeze_features:
+            for param in self.model.parameters():
+                param.requires_grad = False
+        
+        # 3. Remplacer la couche FC
+        in_features = self.model.fc.in_features
+        self.model.fc = nn.Linear(in_features, num_classes)
+        
+    def forward(self, x):
+        return self.model(x)
+
+
