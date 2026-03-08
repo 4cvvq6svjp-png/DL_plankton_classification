@@ -370,3 +370,44 @@ class PretrainedResNet50(nn.Module):
         return self.model(x)
 
 
+import torchvision.models as models
+from torchvision.models import ConvNeXt_Tiny_Weights
+import logging
+
+class PretrainedConvNeXtTiny(nn.Module):
+    """
+    Modèle ConvNeXt Tiny de Meta AI pré-entraîné sur ImageNet-1K.
+    Adapté pour la classification de plancton.
+    """
+    def __init__(self, cfg, input_size, num_classes):
+        super().__init__()
+        
+        logging.info(f"= Initializing ConvNeXt Tiny with {num_classes} classes")
+        
+        # 1. Charger le modèle pré-entraîné de base (Tiny est léger mais puissant)
+        # On utilise la nouvelle syntaxe recommandée de torchvision
+        weights = ConvNeXt_Tiny_Weights.IMAGENET1K_V1
+        self.model = models.convnext_tiny(weights=weights)
+        
+        # 2. Gérer le Fine-Tuning (Gel des paramètres)
+        # Par défaut, on freeze tout le corps du modèle pour ne pas casser le pré-entraînement
+        freeze_features = cfg.get("freeze_features", True)
+        if freeze_features:
+            logging.info("  | Freezing ConvNeXt feature extractor")
+            for param in self.model.parameters():
+                param.requires_grad = False
+        else:
+            logging.info("  | ConvNeXt feature extractor is TRAINABLE (Fine-tuning)")
+
+        # 3. Adapter la tête de classification
+        # Le dernier bloc de ConvNeXt est un Sequential contenant (norm, flatten, linear)
+        # On récupère le nombre de features d'entrée du dernier classifier linéaire (la couche 2)
+        num_ftrs = self.model.classifier[2].in_features
+        
+        # On remplace la dernière couche par une nouvelle couche adaptée à ton nombre de classes
+        # Cette nouvelle couche aura requires_grad=True par défaut
+        self.model.classifier[2] = nn.Linear(num_ftrs, num_classes)
+        
+    def forward(self, x):
+        # ConvNeXt s'occupe de tout en interne
+        return self.model(x)
