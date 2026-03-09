@@ -39,7 +39,8 @@ ln -s $current_dir/logs $TMPDIR/code/logs
 
 
 echo "Setting up the virtual environment"
-/opt/dce/dce_venv.sh /mounts/datasets/venvs/torch-2.7.1 $TMPDIR/venv
+# Adapt to your cluster, e.g.: path/to/venv_script path/to/base/venv $TMPDIR/venv
+python -m venv $TMPDIR/venv
 source $TMPDIR/venv/bin/activate
 
 # Install the library
@@ -66,7 +67,7 @@ def submit_job(job):
     os.system("sbatch job.sbatch")
 
 
-# Vérifier que tout est commité avant soumission
+# Check that all changes are committed before submission
 result = int(
     subprocess.run(
         "expr $(git diff --name-only | wc -l) + $(git diff --name-only --cached | wc -l)",
@@ -75,9 +76,9 @@ result = int(
     ).stdout.decode()
 )
 if result > 0:
-    print(f"We found {result} modifications either not staged or not commited")
+    print(f"We found {result} modification(s) either not staged or not committed")
     raise RuntimeError(
-        "You must stage and commit every modification before submission "
+        "You must stage and commit every modification before submission."
     )
 
 commit_id = subprocess.check_output(
@@ -90,7 +91,7 @@ print(f"I will be using the commit id {commit_id}")
 os.system("mkdir -p logslurms")
 
 if len(sys.argv) not in [2, 3]:
-    print(f"Usage : {sys.argv[0]} config.yaml <nruns|1>")
+    print(f"Usage: {sys.argv[0]} path/to/config.yaml [nruns]")
     sys.exit(-1)
 
 configpath = sys.argv[1]

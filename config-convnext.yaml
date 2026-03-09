@@ -1,5 +1,5 @@
 data:
-  root_dir: '/mounts/datasets/datasets/2025-ZooCamChallenge'
+  root_dir: 'path/to/dataset'
   batch_size: 32
   num_workers: 8
   valid_ratio: 0.2
@@ -10,9 +10,9 @@ data:
 nepochs: 55
 warmup_epochs: 0
 
-# Reprendre depuis les poids du run précédent (ConvNeXt gamma=1.0)
-resume:
-  checkpoint: "./logs/HfModel_20260302_133002_0/best_model.pt"
+# Resume from a previous run (optional)
+# resume:
+#   checkpoint: path/to/run/best_model.pt
 
 logging:
   logdir: "./logs"

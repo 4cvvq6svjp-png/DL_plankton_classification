@@ -29,7 +29,7 @@ def generate_weighted_ensemble_submission(
 
     model_specs: liste de dicts avec clés:
         - config: dict de config (ou path vers YAML)
-        - checkpoint: path vers .pt
+        - checkpoint: path to .pt file
         - f1_score: float (ex. 0.65), utilisé comme poids
     """
     use_cuda = torch.cuda.is_available()
@@ -153,7 +153,7 @@ if __name__ == "__main__":
 
     if len(sys.argv) < 2:
         logging.error(
-            "Usage: python -m src.torchtmpl.predict_ensemble_weighted <ensemble.yaml> [output.csv]"
+            "Usage: python -m torchtmpl.predict_ensemble_weighted path/to/ensemble.yaml [path/to/output.csv]"
         )
         sys.exit(-1)
 
@@ -161,7 +161,7 @@ if __name__ == "__main__":
     output_name = sys.argv[2] if len(sys.argv) > 2 else "submission_ensemble_weighted.csv"
 
     if not os.path.isfile(yaml_path):
-        logging.error(f"Fichier introuvable: {yaml_path}")
+        logging.error(f"File not found: {yaml_path}")
         sys.exit(-1)
 
     model_specs = load_specs_from_yaml(yaml_path)

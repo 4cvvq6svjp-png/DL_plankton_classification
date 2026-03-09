@@ -132,10 +132,10 @@ if __name__ == "__main__":
     logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(message)s")
     if (len(sys.argv) - 1) < 2 or (len(sys.argv) - 1) % 2 != 0:
         logging.error(
-            "Usage : python -m torchtmpl.predict_ensemble "
-            "config_effnet.yaml effnet_best.pt "
-            "config_convnext.yaml convnext_best.pt "
-            "[config_resnet.yaml resnet_best.pt ...]"
+            "Usage: python -m torchtmpl.predict_ensemble "
+            "path/to/config1.yaml path/to/checkpoint1.pt "
+            "path/to/config2.yaml path/to/checkpoint2.pt "
+            "[path/to/config3.yaml path/to/checkpoint3.pt ...]"
         )
         sys.exit(-1)
 

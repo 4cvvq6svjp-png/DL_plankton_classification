@@ -195,7 +195,7 @@ class KaggleTestDataset(torch.utils.data.Dataset):
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     if len(sys.argv) != 2:
-        logging.error(f"Usage: python {sys.argv[0]} <config.yaml>")
+        logging.error(f"Usage: python {sys.argv[0]} path/to/config.yaml")
         sys.exit(-1)
         
     test_dataloaders(sys.argv[1])

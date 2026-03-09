@@ -1,23 +1,22 @@
-# Ensemble pondéré par F1 (macro) pour la prédiction.
-# Chaque modèle vote avec un poids proportionnel à son f1_score.
-# Les poids sont normalisés (somme = 1) dans le script.
+# F1-weighted ensemble for prediction.
+# Each model votes with a weight proportional to its f1_score.
+# Weights are normalized (sum = 1) in the script.
 #
 # Usage:
-#   python -m src.torchtmpl.predict_ensemble_weighted config-ensemble-weighted.yaml
-#   python -m src.torchtmpl.predict_ensemble_weighted config-ensemble-weighted.yaml ma_submission.csv
+#   python -m torchtmpl.predict_ensemble_weighted config-ensemble-weighted.yaml
+#   python -m torchtmpl.predict_ensemble_weighted config-ensemble-weighted.yaml path/to/submission.csv
 
 models:
-  - config: logs/gauthier_best_070/config.yaml
-    checkpoint: logs/gauthier_best_070/best_model__9_.pt
+  - config: path/to/run1/config.yaml
+    checkpoint: path/to/run1/best_model.pt
     f1_score: 0.70
 
-
-  - config: logs/convnext_best_062/config.yaml
-    checkpoint: logs/convnext_best_062/best_model.pt
+  - config: path/to/run2/config.yaml
+    checkpoint: path/to/run2/best_model.pt
     f1_score: 0.62
 
-  - config: logs/effnet_best_060/config.yaml
-    checkpoint: logs/effnet_best_060/best_model.pt
+  - config: path/to/run3/config.yaml
+    checkpoint: path/to/run3/best_model.pt
     f1_score: 0.60
 
 

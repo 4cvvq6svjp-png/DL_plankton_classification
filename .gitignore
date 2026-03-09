@@ -25,3 +25,8 @@ venv/*
 *.pt
 
 *.pth
+
+# Artefacts générés
+batch_preview.png
+submission.csv
+submission_*.csv

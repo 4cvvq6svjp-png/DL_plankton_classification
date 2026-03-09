@@ -1,5 +1,5 @@
 data:
-  root_dir: '/mounts/datasets/datasets/2025-ZooCamChallenge'
+  root_dir: 'path/to/dataset'
   batch_size: 32
   num_workers: 8
   valid_ratio: 0.2

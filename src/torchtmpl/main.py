@@ -294,7 +294,7 @@ if __name__ == "__main__":
     logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(message)s")
 
     if len(sys.argv) != 3:
-        logging.error(f"Usage : {sys.argv[0]} config.yaml <train|test>")
+        logging.error(f"Usage: {sys.argv[0]} path/to/config.yaml <train|test>")
         sys.exit(-1)
 
     logging.info("Loading {}".format(sys.argv[1]))

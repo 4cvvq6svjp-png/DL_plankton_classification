@@ -80,7 +80,7 @@ if __name__ == "__main__":
     logging.basicConfig(stream=sys.stdout, level=logging.INFO, format="%(message)s")
 
     if len(sys.argv) != 3:
-        logging.error(f"Usage : python -m torchtmpl.predict config.yaml path/to/best_model.pt")
+        logging.error(f"Usage: python -m torchtmpl.predict path/to/config.yaml path/to/best_model.pt")
         sys.exit(-1)
 
     config_path = sys.argv[1]
